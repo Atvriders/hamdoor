@@ -34,7 +34,12 @@ services:
       # ACTIVITY_CACHE_SECONDS: "60"              # shared response cache
       # ACTIVITY_MAX_SPOTS: "200"
     volumes:
+      # Named volume (default): zero setup, Docker manages it.
       - hamdoor_data:/data
+      # Host bind mount alternative (easy backups/access), e.g.:
+      #   - /home/james/hamdoor:/data
+      # The container entrypoint fixes ownership automatically at startup.
+      # (Manual fix if ever needed: sudo chown -R 10001:10001 <dir>)
     restart: unless-stopped
 
 volumes:

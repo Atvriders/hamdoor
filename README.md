@@ -56,6 +56,12 @@ All activity sources, ports, and cache/sample timings can be tuned in the
 `environment:` block of `docker-compose.yml` — every option is listed there
 with its default.
 
+**Data:** SQLite lives in the `hamdoor_data` named volume by default. To keep
+the database on the host instead (easy backups), swap the volume line for a
+bind mount like `- /home/james/hamdoor:/data` — the container entrypoint
+fixes directory ownership automatically at startup (the app itself runs as
+unprivileged uid 10001).
+
 To build from source instead of pulling the image:
 
 ```bash
