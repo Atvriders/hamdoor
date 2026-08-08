@@ -1,11 +1,38 @@
+# hamdoor — self-contained deployment. No .env file needed.
+#
+#   docker compose up -d        → http://localhost:3033
+#
+# Everything is configured right here. The ONLY thing you must change before
+# exposing this to the internet is SECRET_KEY below (any long random string,
+# e.g. `python3 -c "import secrets; print(secrets.token_hex(32))"`).
+
 services:
   hamdoor:
-    image: ${REGISTRY:-ghcr.io/atvriders}/hamdoor:${TAG:-latest}
+    image: ghcr.io/atvriders/hamdoor:latest
+    # To build from source instead of pulling the image, comment the line above
+    # and uncomment:  build: .
     ports:
-      - "${PORT:-3033}:8000"
+      - "3033:8000"
     environment:
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env — see .env.example}
-      DATABASE_URL: sqlite:////data/hamdoor.db
+      # --- REQUIRED: change this to a long random string ---
+      SECRET_KEY: "change-me-to-a-long-random-string"
+      DATABASE_URL: "sqlite:////data/hamdoor.db"
+
+      # --- activity toolbox sources (defaults shown; all optional) ---
+      # PSKREPORTER_URL: "https://pskreporter.info/query"
+      # WSPR_LIVE_URL: "https://db1.wspr.live/"
+      # POTA_URL: "https://api.pota.app/spot/activator"
+      # SOTA_URL: "https://api2.sota.org.uk/api/spots/-2/h/all"
+      # HAMQSL_URL: "https://www.hamqsl.com/solarxml.php"
+      # APRS_HOST: "rotate.aprs2.net"
+      # APRS_PORT: "14580"
+      # DXC_HOST: "ve7cc.net"                     # DX cluster telnet node
+      # DXC_PORT: "23"
+      # RBN_HOST: "telnet.reversebeacon.net"      # CW Reverse Beacon Network
+      # RBN_PORT: "7000"
+      # ACTIVITY_SAMPLE_SECONDS: "15"             # live sample window per request
+      # ACTIVITY_CACHE_SECONDS: "60"              # shared response cache
+      # ACTIVITY_MAX_SPOTS: "200"
     volumes:
       - hamdoor_data:/data
     restart: unless-stopped

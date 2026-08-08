@@ -31,6 +31,11 @@ FAKE_RECORDS = {
         city="Dodge City", state="KS", zip="67801", grid="EM18",
         license_class="T", expires="01/01/2030", source="fake",
     ),
+    "W1DDD": CallsignRecord(
+        callsign="W1DDD", name="Dave Douglas", address_line="4 Pine St",
+        city="Newington", state="CT", zip="06111", grid="FN31pq",
+        license_class="A", expires="01/01/2030", source="fake",
+    ),
 }
 
 

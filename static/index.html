@@ -15,6 +15,7 @@
       <button data-view="feed" class="nav-btn active">Feed</button>
       <button data-view="map" class="nav-btn">Map</button>
       <button data-view="operators" class="nav-btn">Operators</button>
+      <button data-view="activity" class="nav-btn">Activity</button>
       <button data-view="profile" class="nav-btn">Profile</button>
       <button id="logout-btn" class="nav-btn danger">Log out</button>
     </nav>
@@ -119,6 +120,46 @@
         <button id="ops-refresh">Refresh</button>
       </div>
       <div id="ops-list"></div>
+    </section>
+
+    <!-- ============ ACTIVITY TOOLBOX ============ -->
+    <section id="view-activity" class="view hidden">
+      <div class="card">
+        <h2>Activity toolbox</h2>
+        <p class="muted small">Live RF activity around <strong id="act-callsign"></strong>.
+        Telnet/APRS sources are sampled live for a few seconds, so their first load takes a moment.</p>
+        <div class="tabs" id="act-tabs">
+          <button class="tab act-tab active" data-src="bands">Band conditions</button>
+          <button class="tab act-tab" data-src="pskreporter">PSK Reporter</button>
+          <button class="tab act-tab" data-src="wspr">WSPR</button>
+          <button class="tab act-tab" data-src="dxcluster">DX cluster</button>
+          <button class="tab act-tab" data-src="rbn">CW RBN</button>
+          <button class="tab act-tab" data-src="aprs">APRS</button>
+          <button class="tab act-tab" data-src="pota">POTA</button>
+          <button class="tab act-tab" data-src="sota">SOTA</button>
+        </div>
+        <div class="row" id="act-controls">
+          <span id="act-source" class="muted small"></span>
+          <label class="small" id="act-dir-wrap" style="display:none">Direction
+            <select id="act-direction" style="width:auto">
+              <option value="sent">Heard me</option>
+              <option value="received">I heard</option>
+            </select>
+          </label>
+          <label class="small" id="act-mine-wrap" style="display:none">
+            <input type="checkbox" id="act-mine-only" style="width:auto"> my signal only
+          </label>
+          <label class="small" id="act-radius-wrap" style="display:none">Radius km
+            <input id="act-radius" type="number" value="150" min="10" max="2000" style="width:6em">
+          </label>
+          <label class="small" id="act-near-wrap">
+            <input type="checkbox" id="act-near-only" style="width:auto"> within my range only
+          </label>
+          <button id="act-refresh">Refresh</button>
+        </div>
+        <div id="act-status" class="muted small"></div>
+        <div id="act-content"></div>
+      </div>
     </section>
 
     <!-- ============ PROFILE ============ -->

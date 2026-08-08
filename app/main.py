@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
-from app.routes import auth, lookup, operators, posts, users
+from app.routes import activity, auth, lookup, operators, posts, users
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -24,6 +24,7 @@ app.include_router(lookup.router)
 app.include_router(users.router)
 app.include_router(operators.router)
 app.include_router(posts.router)
+app.include_router(activity.router)
 
 
 @app.get("/api/health")

@@ -65,7 +65,7 @@ function fmtDate(iso) {
 
 // ---------- views ----------
 
-const VIEWS = ["auth", "feed", "map", "operators", "profile"];
+const VIEWS = ["auth", "feed", "map", "operators", "activity", "profile"];
 
 function switchView(name) {
   VIEWS.forEach((v) => hide($(`#view-${v}`)));
@@ -73,6 +73,7 @@ function switchView(name) {
   $$(".nav-btn[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   if (name === "feed") loadFeed();
   if (name === "operators") loadOperators();
+  if (name === "activity") loadActivity();
   if (name === "profile") loadProfile();
   if (name === "map") loadMap();
 }
@@ -425,6 +426,139 @@ $("#form-password").addEventListener("submit", async (ev) => {
     $("#password-status").textContent = "Password changed.";
   } catch (e) { $("#password-status").textContent = e.message; }
 });
+
+// ---------- activity toolbox ----------
+
+const act = { src: "bands", loaded: {} };
+
+function actTable(cols, rows) {
+  if (!rows.length) return `<p class="muted">No spots right now.</p>`;
+  const head = cols.map((c) => `<th>${c[1]}</th>`).join("");
+  const body = rows.map((r) =>
+    `<tr>${cols.map((c) => `<td>${c[2] ? c[2](r) : esc(r[c[0]] ?? "")}</td>`).join("")}</tr>`).join("");
+  return `<div class="table-wrap"><table class="spots"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+const fmtFreqMHz = (khz) => khz ? (Number(khz) / 1000).toFixed(3) + " MHz" : "";
+const fmtDist = (mi) => mi != null ? mi + " mi" : "";
+const fmtTime = (t) => {
+  if (!t) return "";
+  const d = new Date(t.endsWith("Z") || t.includes("+") ? t : t + "Z");
+  return isNaN(d) ? esc(t) : d.toUTCString().slice(17, 22) + " UTC";
+};
+
+function nearFilter(rows) {
+  if (!$("#act-near-only").checked || !state.user) return rows;
+  return rows.filter((r) => r.distance_miles != null && r.distance_miles <= state.user.range_miles);
+}
+
+async function loadActivity() {
+  $("#act-callsign").textContent = state.user ? state.user.callsign : "";
+  $("#act-dir-wrap").style.display = act.src === "pskreporter" ? "" : "none";
+  $("#act-mine-wrap").style.display = act.src === "rbn" ? "" : "none";
+  $("#act-radius-wrap").style.display = act.src === "aprs" ? "" : "none";
+  $("#act-near-wrap").style.display = ["pskreporter", "aprs", "pota", "sota"].includes(act.src) ? "" : "none";
+
+  const status = $("#act-status"), content = $("#act-content");
+  status.textContent = "Loading " + act.src + "…";
+  content.innerHTML = "";
+  $$(".act-tab").forEach((b) => b.classList.toggle("active", b.dataset.src === act.src));
+
+  try {
+    let url = `/api/activity/${act.src}`;
+    if (act.src === "pskreporter") url += `?direction=${$("#act-direction").value}`;
+    if (act.src === "rbn") url += `?mine_only=${$("#act-mine-only").checked}`;
+    if (act.src === "aprs") url += `?radius_km=${Number($("#act-radius").value) || 150}`;
+    const data = await api(url);
+    $("#act-source").textContent = data.source ? `source: ${data.source}` : "";
+
+    if (act.src === "bands") {
+      const condColor = { Good: "#7ee787", Fair: "#e3b341", Poor: "#ff7b72" };
+      status.textContent = data.updated ? "updated " + data.updated : "";
+      content.innerHTML = `
+        <div class="row solar-row">
+          <div class="stat">SFI<br><strong>${esc(data.solar_flux)}</strong></div>
+          <div class="stat">A<br><strong>${esc(data.a_index)}</strong></div>
+          <div class="stat">K<br><strong>${esc(data.k_index)}</strong></div>
+          <div class="stat">Sunspots<br><strong>${esc(data.sunspots)}</strong></div>
+          <div class="stat">Solar wind<br><strong>${esc(data.solar_wind)}</strong> km/s</div>
+          <div class="stat">Geomag<br><strong>${esc(data.geomag)}</strong></div>
+        </div>
+        ${actTable([["band", "Band"], ["time", "Time of day"],
+          ["condition", "Condition", (r) => `<span style="color:${condColor[r.condition] || "inherit"}">${esc(r.condition)}</span>`]],
+          data.bands || [])}`;
+    } else if (act.src === "pskreporter") {
+      const sent = $("#act-direction").value === "sent";
+      status.textContent = `${data.spots.length} reports (last ~hours, cached 1 min)`;
+      content.innerHTML = actTable(
+        [["time", "Time", (r) => fmtTime(r.time)],
+         [sent ? "receiver_callsign" : "sender_callsign", sent ? "Heard by" : "Heard"],
+         ["mode", "Mode"],
+         ["frequency_hz", "Freq", (r) => fmtFreqMHz(r.frequency_hz / 1000)],
+         ["snr", "SNR", (r) => r.snr + " dB"],
+         [sent ? "receiver_grid" : "sender_grid", "Grid"],
+         ["distance_miles", "Distance", (r) => fmtDist(r.distance_miles)]],
+        nearFilter(data.spots));
+    } else if (act.src === "wspr") {
+      status.textContent = `${data.spots.length} WSPR reports in the last 24h`;
+      content.innerHTML = actTable(
+        [["time", "Time", (r) => fmtTime(r.time)],
+         ["tx_callsign", "TX"], ["rx_callsign", "RX"],
+         ["band_m", "Band", (r) => r.band_m != null ? r.band_m + " m" : ""],
+         ["snr", "SNR", (r) => r.snr + " dB"],
+         ["power_dbm", "Power", (r) => r.power_dbm != null ? r.power_dbm + " dBm" : ""],
+         ["distance_miles", "Distance", (r) => fmtDist(r.distance_miles)]],
+        data.spots);
+    } else if (act.src === "dxcluster") {
+      status.textContent = `${data.spots.length} spots in a ${data.sample_seconds}s live sample`;
+      content.innerHTML = actTable(
+        [["time", "Time"], ["dx_callsign", "DX"],
+         ["frequency_khz", "Freq", (r) => fmtFreqMHz(r.frequency_khz)],
+         ["spotter", "Spotter"], ["comment", "Comment"]],
+        data.spots);
+    } else if (act.src === "rbn") {
+      status.textContent = `${data.spots.length} CW skimmer reports in a ${data.sample_seconds}s live sample`;
+      content.innerHTML = actTable(
+        [["time", "Time"], ["dx_callsign", "Station"],
+         ["frequency_khz", "Freq", (r) => fmtFreqMHz(r.frequency_khz)],
+         ["spotter", "Skimmer"], ["comment", "Report"]],
+        data.spots);
+    } else if (act.src === "aprs") {
+      status.textContent = `${data.stations.length} stations within ${data.radius_km} km (${data.sample_seconds}s live sample)`;
+      content.innerHTML = actTable(
+        [["callsign", "Station"], ["object", "Object"],
+         ["distance_miles", "Distance", (r) => fmtDist(r.distance_miles)],
+         ["comment", "Comment"]],
+        nearFilter(data.stations));
+    } else if (act.src === "pota") {
+      status.textContent = `${data.spots.length} active parks`;
+      content.innerHTML = actTable(
+        [["time", "Time", (r) => fmtTime(r.time)], ["activator", "Activator"],
+         ["park_ref", "Park"], ["frequency_khz", "Freq", (r) => r.frequency_khz ? r.frequency_khz + " kHz" : ""],
+         ["mode", "Mode"], ["distance_miles", "Distance", (r) => fmtDist(r.distance_miles)],
+         ["comments", "Comments"]],
+        nearFilter(data.spots));
+    } else if (act.src === "sota") {
+      status.textContent = `${data.spots.length} summit spots (last 2h)`;
+      content.innerHTML = actTable(
+        [["time", "Time", (r) => fmtTime(r.time)], ["activator", "Activator"],
+         ["summit", "Summit"], ["frequency_khz", "Freq kHz"],
+         ["mode", "Mode"], ["distance_miles", "Distance", (r) => fmtDist(r.distance_miles)],
+         ["comments", "Comments"]],
+        nearFilter(data.spots));
+    }
+  } catch (e) {
+    status.textContent = "";
+    content.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+$$(".act-tab").forEach((b) => b.addEventListener("click", () => { act.src = b.dataset.src; loadActivity(); }));
+$("#act-refresh").addEventListener("click", loadActivity);
+$("#act-direction").addEventListener("change", loadActivity);
+$("#act-mine-only").addEventListener("change", loadActivity);
+$("#act-near-only").addEventListener("change", loadActivity);
+$("#act-radius").addEventListener("change", loadActivity);
 
 // ---------- nav & boot ----------
 
