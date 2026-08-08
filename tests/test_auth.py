@@ -71,6 +71,22 @@ def test_login_success_and_me(client):
 def test_login_wrong_password(client):
     r = client.post("/api/auth/login", json={"callsign": "W1BBB", "password": "wrong-password"})
     assert r.status_code == 401
+    assert r.json()["detail"] == "incorrect password"
+
+
+def test_login_unknown_callsign_tells_you_to_sign_up(client):
+    r = client.post("/api/auth/login", json={"callsign": "W9ZZZ", "password": "whatever123"})
+    assert r.status_code == 404
+    assert "no account registered" in r.json()["detail"]
+
+
+def test_health_reports_user_count(client):
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["users"] >= 2  # signups from earlier tests share this DB
+    assert body["database"].endswith(".db")
 
 
 def test_protected_route_requires_token(client):

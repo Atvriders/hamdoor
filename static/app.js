@@ -29,6 +29,7 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
   });
   if (resp.status === 401 && auth) {
     setSession(null, null);
+    showAuthTab("login");
     switchView("auth");
     throw new Error("session expired — please log in again");
   }
@@ -36,7 +37,9 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
     const detail = data && data.detail;
-    throw new Error(typeof detail === "string" ? detail : `request failed (${resp.status})`);
+    const err = new Error(typeof detail === "string" ? detail : `request failed (${resp.status})`);
+    err.status = resp.status;
+    throw err;
   }
   return data;
 }
@@ -87,16 +90,17 @@ function enterApp() {
 
 function authError(msg) { $("#auth-error").textContent = msg || ""; }
 
-$("#tab-signup").addEventListener("click", () => {
-  $("#tab-signup").classList.add("active");
-  $("#tab-login").classList.remove("active");
-  show($("#form-signup")); hide($("#form-login")); authError("");
-});
-$("#tab-login").addEventListener("click", () => {
-  $("#tab-login").classList.add("active");
-  $("#tab-signup").classList.remove("active");
-  show($("#form-login")); hide($("#form-signup")); authError("");
-});
+function showAuthTab(which) {
+  const signup = which === "signup";
+  $("#tab-signup").classList.toggle("active", signup);
+  $("#tab-login").classList.toggle("active", !signup);
+  signup ? (show($("#form-signup")), hide($("#form-login")))
+         : (show($("#form-login")), hide($("#form-signup")));
+  authError("");
+}
+
+$("#tab-signup").addEventListener("click", () => showAuthTab("signup"));
+$("#tab-login").addEventListener("click", () => showAuthTab("login"));
 
 $("#lookup-btn").addEventListener("click", async () => {
   const cs = $("#su-callsign").value.trim().toUpperCase();
@@ -150,7 +154,19 @@ $("#form-signup").addEventListener("submit", async (ev) => {
     });
     setSession(r.token, r.user);
     enterApp();
-  } catch (e) { authError(e.message); }
+  } catch (e) {
+    if (e.status === 409) {
+      // already registered — that's a login, not a signup: move the user to
+      // the Log in tab with their callsign prefilled instead of dead-ending
+      const cs = $("#su-callsign").value.trim().toUpperCase();
+      showAuthTab("login");
+      $("#li-callsign").value = cs;
+      $("#li-password").focus();
+      authError(`${cs} already has an account — log in below.`);
+    } else {
+      authError(e.message);
+    }
+  }
 });
 
 $("#form-login").addEventListener("submit", async (ev) => {
@@ -170,6 +186,7 @@ $("#form-login").addEventListener("submit", async (ev) => {
 $("#logout-btn").addEventListener("click", () => {
   setSession(null, null);
   hide($("#nav"));
+  showAuthTab("login");  // returning user — land on Log in, not Sign up
   switchView("auth");
 });
 

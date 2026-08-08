@@ -83,6 +83,11 @@ def signup(
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.callsign == body.callsign))
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid callsign or password")
+    if user is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"no account registered for {body.callsign} on this server — sign up first",
+        )
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect password")
     return TokenResponse(token=create_token(user), user=user_self(user))

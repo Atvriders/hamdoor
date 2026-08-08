@@ -115,6 +115,27 @@ Activity toolbox (all require the same JWT):
 
 Interactive docs: `http://localhost:3033/api/docs` (port 8000 in the no-Docker dev setup).
 
+## Troubleshooting
+
+- **"that callsign is already registered" when trying to log in** — you're on
+  the **Sign up** tab, not **Log in**. The app now auto-switches you to the
+  Log in tab when this happens.
+- **"no account registered for …" at login** — the server's database does not
+  contain your account. Almost always this means the data location changed
+  (e.g. switched from a named volume to a bind mount, or wiped the volume)
+  and you're looking at a fresh empty DB. Check
+  `curl http://localhost:3033/api/health` — `users` shows how many accounts
+  the current database holds. If it's 0, sign up again (and make sure your
+  `volumes:` mapping is stable across recreates).
+- **"incorrect password"** — the account exists; the password is wrong.
+  Passwords are bcrypt-hashed; there is no reset email in v1, so an admin can
+  delete the row from `/data/hamdoor.db` (`DELETE FROM users WHERE
+  callsign='…'`) and the user can sign up again.
+- **Container restart loops** — `docker compose logs hamdoor`. A
+  permissions error on `/data` means the bind-mounted host directory isn't
+  writable by uid 10001; the entrypoint normally fixes this, and prints the
+  manual `chown` command if it can't.
+
 ## Privacy model
 
 Other users only ever see your callsign, name, grid square, and distance.

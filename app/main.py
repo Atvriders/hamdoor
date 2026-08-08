@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from app.db import init_db
+from app.config import get_settings
+from app.db import get_db, init_db
+from app.models import User
 from app.routes import activity, auth, lookup, operators, posts, users
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -28,8 +32,15 @@ app.include_router(activity.router)
 
 
 @app.get("/api/health")
-def health():
-    return {"status": "ok", "service": "hamdoor"}
+def health(db: Session = Depends(get_db)):
+    """Liveness + a user count, so deployments can verify the database
+    actually persisted across container recreates."""
+    return {
+        "status": "ok",
+        "service": "hamdoor",
+        "users": db.scalar(select(func.count()).select_from(User)),
+        "database": get_settings().database_url.rsplit("/", 1)[-1],
+    }
 
 
 @app.get("/", include_in_schema=False)
