@@ -25,7 +25,7 @@ cp .env.example .env
 python3 -c "import secrets; print(secrets.token_hex(32))"
 
 docker compose up -d
-# open http://localhost:8000
+# open http://localhost:3033
 ```
 
 To build locally instead of pulling from GHCR:
@@ -64,7 +64,7 @@ pytest -q
 | `POST /api/posts`, `GET/PATCH/DELETE /api/posts/{id}` | post CRUD (author-only edits) |
 | `POST /api/posts/{id}/comments`, `DELETE /api/comments/{id}` | comments |
 
-Interactive docs: `http://localhost:8000/api/docs`.
+Interactive docs: `http://localhost:3033/api/docs` (port 8000 in the no-Docker dev setup).
 
 ## Privacy model
 
