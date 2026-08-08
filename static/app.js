@@ -37,7 +37,19 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
     const detail = data && data.detail;
-    const err = new Error(typeof detail === "string" ? detail : `request failed (${resp.status})`);
+    let msg;
+    if (typeof detail === "string") {
+      msg = detail;
+    } else if (Array.isArray(detail)) {
+      // pydantic validation errors arrive as a list — make them readable
+      msg = detail.map((d) => {
+        const field = (d.loc || []).filter((x) => x !== "body").join(".") || "input";
+        return `${field}: ${String(d.msg).replace(/^Value error, /, "")}`;
+      }).join("; ");
+    } else {
+      msg = `request failed (${resp.status})`;
+    }
+    const err = new Error(msg);
     err.status = resp.status;
     throw err;
   }

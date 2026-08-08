@@ -9,7 +9,11 @@ router = APIRouter(prefix="/api/lookup", tags=["lookup"])
 @router.get("/{callsign}", response_model=LookupResponse)
 def lookup(callsign: str, provider: CallsignProvider = Depends(get_provider)):
     """Public autofill endpoint used by the signup form."""
-    cs = normalize_callsign(callsign)
+    try:
+        cs = normalize_callsign(callsign)
+    except ValueError:
+        # malformed callsigns are "not found", not a server error
+        return LookupResponse(found=False, callsign=callsign.upper())
     record = provider.lookup(cs)
     if record is None:
         return LookupResponse(found=False, callsign=cs)

@@ -22,6 +22,12 @@ def test_lookup_normalizes_callsign(client):
     assert r.json()["callsign"] == "W1AAA"
 
 
+def test_lookup_invalid_callsign_is_clean_not_found(client):
+    r = client.get("/api/lookup/not a callsign!")
+    assert r.status_code == 200
+    assert r.json()["found"] is False
+
+
 def test_signup_autofills_profile(client):
     data = signup(client, "W1AAA")
     assert data["token"]
