@@ -1,0 +1,14 @@
+services:
+  hamdoor:
+    image: ${REGISTRY:-ghcr.io/atvriders}/hamdoor:${TAG:-latest}
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env — see .env.example}
+      DATABASE_URL: sqlite:////data/hamdoor.db
+    volumes:
+      - hamdoor_data:/data
+    restart: unless-stopped
+
+volumes:
+  hamdoor_data:

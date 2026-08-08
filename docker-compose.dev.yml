@@ -1,0 +1,6 @@
+# Local development override: builds the image from source instead of pulling GHCR.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  hamdoor:
+    image: hamdoor:dev
+    build: .

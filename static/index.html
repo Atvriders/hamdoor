@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>hamdoor — your ham radio neighborhood</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">📻 hamdoor</div>
+    <nav id="nav" class="hidden">
+      <button data-view="feed" class="nav-btn active">Feed</button>
+      <button data-view="map" class="nav-btn">Map</button>
+      <button data-view="operators" class="nav-btn">Operators</button>
+      <button data-view="profile" class="nav-btn">Profile</button>
+      <button id="logout-btn" class="nav-btn danger">Log out</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ AUTH ============ -->
+    <section id="view-auth" class="view">
+      <div class="card narrow">
+        <h1>Welcome to hamdoor</h1>
+        <p class="muted">The neighborhood network for amateur radio operators.
+        Sign up with your callsign — we'll fill in your details from the FCC database.</p>
+
+        <div class="tabs">
+          <button id="tab-signup" class="tab active">Sign up</button>
+          <button id="tab-login" class="tab">Log in</button>
+        </div>
+
+        <form id="form-signup">
+          <label>Callsign
+            <div class="row">
+              <input id="su-callsign" required maxlength="8" placeholder="W1AW" style="text-transform:uppercase">
+              <button type="button" id="lookup-btn">Look up</button>
+            </div>
+          </label>
+          <div id="lookup-status" class="muted small"></div>
+          <div id="signup-details" class="hidden">
+            <label>Name <input id="su-name"></label>
+            <label>Street address <input id="su-address"></label>
+            <div class="row">
+              <label>City <input id="su-city"></label>
+              <label>State <input id="su-state" maxlength="2" style="width:5em"></label>
+              <label>ZIP <input id="su-zip" maxlength="10" style="width:7em"></label>
+            </div>
+            <label>Grid square <input id="su-grid" maxlength="8" placeholder="FN31pr"></label>
+            <label>Email <input id="su-email" type="email" required placeholder="you@example.com"></label>
+            <label>Password <input id="su-password" type="password" required minlength="8" placeholder="at least 8 characters"></label>
+            <button type="submit" class="primary">Create account</button>
+          </div>
+        </form>
+
+        <form id="form-login" class="hidden">
+          <label>Callsign <input id="li-callsign" required style="text-transform:uppercase"></label>
+          <label>Password <input id="li-password" type="password" required></label>
+          <button type="submit" class="primary">Log in</button>
+        </form>
+        <div id="auth-error" class="error"></div>
+      </div>
+    </section>
+
+    <!-- ============ FEED ============ -->
+    <section id="view-feed" class="view hidden">
+      <div class="card">
+        <h2>Compose a post</h2>
+        <form id="form-post">
+          <input id="post-title" required maxlength="200" placeholder="Title — e.g. antenna party Saturday, need an Elmer…">
+          <textarea id="post-body" rows="3" placeholder="Details for your nearby hams…"></textarea>
+          <div class="row">
+            <select id="post-category">
+              <option value="general">General</option>
+              <option value="for-sale">For sale / wanted</option>
+              <option value="nets-events">Nets &amp; events</option>
+              <option value="help-wanted">Help wanted</option>
+              <option value="elmer">Elmer (mentoring)</option>
+            </select>
+            <button type="submit" class="primary">Post</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="row feed-toolbar">
+        <h2>Your local feed</h2>
+        <select id="feed-filter">
+          <option value="">All categories</option>
+          <option value="general">General</option>
+          <option value="for-sale">For sale / wanted</option>
+          <option value="nets-events">Nets &amp; events</option>
+          <option value="help-wanted">Help wanted</option>
+          <option value="elmer">Elmer</option>
+        </select>
+        <button id="feed-refresh">Refresh</button>
+      </div>
+      <div id="feed-range-note" class="muted small"></div>
+      <div id="feed-list"></div>
+      <div class="row">
+        <button id="feed-prev">← Newer</button>
+        <span id="feed-page" class="muted"></span>
+        <button id="feed-next">Older →</button>
+      </div>
+    </section>
+
+    <!-- ============ MAP ============ -->
+    <section id="view-map" class="view hidden">
+      <div id="map"></div>
+      <p class="muted small">Operator pins are centered on grid squares, never exact addresses.</p>
+    </section>
+
+    <!-- ============ OPERATORS ============ -->
+    <section id="view-operators" class="view hidden">
+      <div class="row feed-toolbar">
+        <h2>Nearby operators</h2>
+        <button id="ops-refresh">Refresh</button>
+      </div>
+      <div id="ops-list"></div>
+    </section>
+
+    <!-- ============ PROFILE ============ -->
+    <section id="view-profile" class="view hidden">
+      <div class="card narrow">
+        <h2 id="profile-heading">Profile</h2>
+        <form id="form-profile">
+          <label>Name <input id="pf-name"></label>
+          <label>Email <input id="pf-email" type="email"></label>
+          <label>Street address <input id="pf-address"></label>
+          <div class="row">
+            <label>City <input id="pf-city"></label>
+            <label>State <input id="pf-state" maxlength="2" style="width:5em"></label>
+            <label>ZIP <input id="pf-zip" maxlength="10" style="width:7em"></label>
+          </div>
+          <label>Grid square <input id="pf-grid" maxlength="8"></label>
+          <label>Neighborhood range: <strong><span id="pf-range-label"></span> miles</strong>
+            <input id="pf-range" type="range" min="5" max="500" step="5">
+          </label>
+          <p class="muted small">Posts and operators within this distance appear in your feed (5–500 miles).</p>
+          <div class="row">
+            <button type="submit" class="primary">Save</button>
+            <button type="button" id="pf-refresh-callsign">Re-sync from FCC</button>
+          </div>
+        </form>
+        <div id="profile-status" class="muted small"></div>
+
+        <h3>Change password</h3>
+        <form id="form-password">
+          <label>Current password <input id="pw-current" type="password" required></label>
+          <label>New password <input id="pw-new" type="password" minlength="8" required></label>
+          <button type="submit">Change password</button>
+        </form>
+        <div id="password-status" class="muted small"></div>
+      </div>
+    </section>
+  </main>
+
+  <template id="tpl-post">
+    <article class="card post">
+      <header class="row">
+        <span class="badge"></span>
+        <strong class="post-title"></strong>
+      </header>
+      <div class="post-meta muted small"></div>
+      <p class="post-body"></p>
+      <div class="post-actions row"></div>
+      <div class="comments"></div>
+      <form class="comment-form row hidden">
+        <input class="comment-input" placeholder="Write a comment…" maxlength="4000">
+        <button type="submit">Send</button>
+      </form>
+    </article>
+  </template>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
