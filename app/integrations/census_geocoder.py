@@ -43,9 +43,11 @@ def parse_batch_response(text: str) -> dict[str, tuple[float, float, str]]:
     return out
 
 
-def _post_chunk(client: httpx.Client, url: str, csv_text: str, label: str) -> dict:
+def _post_chunk(client: httpx.Client, url: str, csv_text: str, label: str,
+                expected: int = 1) -> dict:
     """POST one chunk with backoff — the Census service throttles under load
-    (read timeouts, 502s), so retry instead of skipping the whole batch."""
+    (read timeouts, 502s, or a 200 response that is nearly all No_Match), so
+    retry instead of skipping the whole batch."""
     delay = 30.0
     for attempt in range(1, 5):
         try:
@@ -55,7 +57,16 @@ def _post_chunk(client: httpx.Client, url: str, csv_text: str, label: str) -> di
                 files={"addressFile": ("addresses.csv", csv_text, "text/csv")},
             )
             if resp.status_code == 200:
-                return parse_batch_response(resp.text)
+                matched = parse_batch_response(resp.text)
+                # a 200 that matches <20% of rows is a throttled junk reply,
+                # not a real result (this dataset normally matches ~95%)
+                if expected and len(matched) < 0.2 * expected and attempt < 4:
+                    log.warning("[geocode] %s: only %d/%d matched — throttled response, backing off",
+                                label, len(matched), expected)
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                return matched
             log.warning("[geocode] %s HTTP %s (attempt %d/4)", label, resp.status_code, attempt)
         except httpx.HTTPError as exc:
             log.warning("[geocode] %s failed (attempt %d/4): %s", label, attempt, exc)
@@ -91,7 +102,8 @@ def geocode_batch(rows: list[tuple[str, str, str, str, str]],
             for rid, street, city, state, zip_ in part:
                 w.writerow([rid, street, city, state, zip_])
             n = i // chunk + 1
-            matched = _post_chunk(client, s.census_url, buf.getvalue(), f"batch {n}/{total_chunks}")
+            matched = _post_chunk(client, s.census_url, buf.getvalue(),
+                                  f"batch {n}/{total_chunks}", expected=len(part))
             if matched:
                 results.update(matched)
                 log.info("[geocode] batch %d/%d: %d/%d matched",
