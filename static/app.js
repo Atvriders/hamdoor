@@ -133,6 +133,7 @@ $("#lookup-btn").addEventListener("click", async () => {
     $("#su-state").value = r.state || "";
     $("#su-zip").value = r.zip || "";
     $("#su-grid").value = r.grid || "";
+    if (r.email) $("#su-email").value = r.email;
     $("#lookup-status").textContent =
       `Found: ${r.name} — ${[r.city, r.state].filter(Boolean).join(", ")}` +
       (r.license_class ? ` (class ${r.license_class})` : "") +
@@ -358,6 +359,8 @@ async function loadMap() {
       maxZoom: 18,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(state.map);
+    state.hamLayer = L.layerGroup().addTo(state.map);
+    state.map.on("moveend", () => { if ($("#map-all-hams").checked) loadHamLayer(); });
   }
   setTimeout(() => state.map.invalidateSize(), 50);
   state.mapMarkers.forEach((m) => m.remove());
@@ -375,19 +378,63 @@ async function loadMap() {
       color: "#4da3ff", weight: 1, fillOpacity: 0.06,
     }).addTo(state.map);
   }
-  try {
-    const ops = await api("/api/operators/nearby");
-    ops.forEach((o) => {
-      if (o.lat == null || o.lon == null) return;
-      const m = L.marker([o.lat, o.lon]).addTo(state.map)
-        .bindPopup(`<b>${esc(o.callsign)}</b>${o.name ? " — " + esc(o.name) : ""}<br>${o.distance_miles ?? "?"} mi away`);
-      state.mapMarkers.push(m);
-      bounds.push([o.lat, o.lon]);
-    });
-  } catch (e) { /* banner shown in operators view */ }
+  if ($("#map-ops").checked) {
+    try {
+      const ops = await api("/api/operators/nearby");
+      ops.forEach((o) => {
+        if (o.lat == null || o.lon == null) return;
+        const m = L.marker([o.lat, o.lon]).addTo(state.map)
+          .bindPopup(`<b>${esc(o.callsign)}</b>${o.name ? " — " + esc(o.name) : ""}<br>${o.distance_miles ?? "?"} mi away (registered)`);
+        state.mapMarkers.push(m);
+        bounds.push([o.lat, o.lon]);
+      });
+    } catch (e) { /* banner shown in operators view */ }
+  }
   if (bounds.length) state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 11 });
   else state.map.setView([39.8, -98.5], 4);
+
+  loadHamLayer();
 }
+
+async function loadHamLayer() {
+  if (!state.map) return;
+  state.hamLayer.clearLayers();
+  const status = $("#map-status");
+  if (!$("#map-all-hams").checked) { status.textContent = ""; return; }
+  const b = state.map.getBounds();
+  const z = state.map.getZoom();
+  status.textContent = "loading hams…";
+  try {
+    const q = `min_lat=${b.getSouth()}&max_lat=${b.getNorth()}&min_lon=${b.getWest()}&max_lon=${b.getEast()}&zoom=${z}`;
+    const data = await api(`/api/hams/map?${q}`);
+    if (data.type === "clusters") {
+      let total = 0;
+      data.cells.forEach((c) => {
+        total += c.count;
+        const r = Math.min(28, 6 + Math.log10(c.count) * 7);
+        L.circleMarker([c.lat, c.lon], {
+          radius: r, color: "#e3b341", weight: 1, fillColor: "#e3b341", fillOpacity: 0.35,
+        }).addTo(state.hamLayer)
+          .bindTooltip(`${c.count.toLocaleString()} hams`, { direction: "top" });
+      });
+      status.textContent = `${total.toLocaleString()} hams in view (zoom in to ${z >= 9 ? "1 more level" : "level 10"} for individual callsigns)`;
+    } else {
+      data.hams.forEach((h) => {
+        L.circleMarker([h.lat, h.lon], {
+          radius: 4, color: "#4da3ff", weight: 1, fillColor: "#4da3ff", fillOpacity: 0.6,
+        }).addTo(state.hamLayer)
+          .bindTooltip(`<b>${esc(h.callsign)}</b> — ${esc(h.name)}<br>${esc(h.city)}, ${esc(h.state)}`, { direction: "top" });
+      });
+      status.textContent = `${data.hams.length.toLocaleString()} hams shown` +
+        (data.truncated ? " (capped — zoom in further)" : "");
+    }
+  } catch (e) {
+    status.textContent = e.message;
+  }
+}
+
+$("#map-all-hams").addEventListener("change", loadHamLayer);
+$("#map-ops").addEventListener("change", loadMap);
 
 // ---------- profile ----------
 

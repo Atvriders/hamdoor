@@ -4,6 +4,25 @@
 your neighbors are hams and your address comes from the FCC database. Plus a
 live **activity toolbox** that shows the RF world around you.
 
+## FCC directory (every US ham)
+
+On first start the container downloads the FCC's weekly ULS amateur extract
+(~200 MB) and imports every active US license — callsign, name, city/state/
+ZIP, license class, expiry, and the email the licensee published to the FCC —
+into the local database. A background scheduler re-imports weekly
+(`ULS_REFRESH_DAYS`, default 7). The import takes a few minutes; the site
+works while it runs, and `GET /api/hams/count` shows progress state.
+
+What it's used for:
+
+- **Signup prefill** — the lookup endpoint now answers from the local FCC
+  snapshot when callook.info misses or is down, including the **email** when
+  the licensee published one (editable before submitting).
+- **The map's "All US hams" layer** — every ham in the country, clustered by
+  grid cell at low zoom and individual pins (callsign, name, city) from zoom
+  10 in. Locations are **ZIP-code centroids** — street addresses are never
+  exposed by the API.
+
 ## Neighborhood network
 
 - Sign up with your **callsign**; name and address autofill from
@@ -112,6 +131,14 @@ Activity toolbox (all require the same JWT):
 | `GET /api/activity/aprs?radius_km=150` | live APRS stations near you |
 | `GET /api/activity/pota` | POTA activator spots |
 | `GET /api/activity/sota` | SOTA spots (last 2 h) |
+
+FCC directory:
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/hams/count` | imported hams + last import time |
+| `GET /api/hams/map?min_lat=…&max_lat=…&min_lon=…&max_lon=…&zoom=…` | clustered cells (zoom < 10) or individual hams in the viewport |
+| `GET /api/hams/{callsign}` | public directory entry (never street/email) |
 
 Interactive docs: `http://localhost:3033/api/docs` (port 8000 in the no-Docker dev setup).
 

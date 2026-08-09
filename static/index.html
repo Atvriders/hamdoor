@@ -109,8 +109,13 @@
 
     <!-- ============ MAP ============ -->
     <section id="view-map" class="view hidden">
+      <div class="row map-toolbar">
+        <label class="small"><input type="checkbox" id="map-all-hams" checked style="width:auto"> All US hams (FCC)</label>
+        <label class="small"><input type="checkbox" id="map-ops" checked style="width:auto"> Registered operators</label>
+        <span id="map-status" class="muted small"></span>
+      </div>
       <div id="map"></div>
-      <p class="muted small">Operator pins are centered on grid squares, never exact addresses.</p>
+      <p class="muted small">Ham locations are FCC ZIP-code centroids; registered operator pins sit on grid squares. Street addresses are never shown.</p>
     </section>
 
     <!-- ============ OPERATORS ============ -->

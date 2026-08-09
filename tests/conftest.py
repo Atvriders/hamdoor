@@ -5,6 +5,7 @@ _fd, _db_path = tempfile.mkstemp(suffix=".db")
 os.close(_fd)
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
 os.environ["SECRET_KEY"] = "test-secret"
+os.environ["ULS_IMPORT_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

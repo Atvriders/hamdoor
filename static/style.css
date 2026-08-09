@@ -144,6 +144,10 @@ table.spots tr:hover td { background: var(--card2); }
 #act-controls label { margin: 0; }
 #act-controls input[type="number"] { margin-top: 0; }
 
+.map-toolbar { margin-bottom: 0.5rem; }
+.map-toolbar label { margin: 0; }
+.map-toolbar input { margin-top: 0; }
+
 @media (max-width: 560px) {
   .row > label { min-width: 45%; }
   #map { height: 55vh; }

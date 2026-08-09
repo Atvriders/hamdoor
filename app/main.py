@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db, init_db
 from app.models import User
-from app.routes import activity, auth, lookup, operators, posts, users
+from app.routes import activity, auth, hams, lookup, operators, posts, users
+from app.scheduler import start_uls_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -18,6 +19,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    start_uls_scheduler()  # imports FCC ULS data on first run, then weekly
     yield
 
 
@@ -29,6 +31,7 @@ app.include_router(users.router)
 app.include_router(operators.router)
 app.include_router(posts.router)
 app.include_router(activity.router)
+app.include_router(hams.router)
 
 
 @app.get("/api/health")

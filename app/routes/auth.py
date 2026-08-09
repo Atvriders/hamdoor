@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.integrations.geocode import resolve_location
-from app.integrations.provider import CallsignProvider, get_provider
-from app.models import User
+from app.integrations.provider import CallsignProvider, CallsignRecord, get_provider
+from app.models import Ham, User
 from app.schemas import (
     LoginRequest,
     SignupRequest,
@@ -44,6 +44,18 @@ def signup(
         raise HTTPException(status.HTTP_409_CONFLICT, "that callsign is already registered")
 
     record = provider.lookup(body.callsign)
+    ham = None
+    if record is None:
+        # fall back to the local weekly FCC ULS import (works even if the
+        # live provider is unreachable)
+        ham = db.get(Ham, body.callsign)
+        if ham is not None:
+            record = CallsignRecord(
+                callsign=ham.callsign, name=ham.name, address_line=ham.street,
+                city=ham.city, state=ham.state, zip=ham.zip,
+                license_class=ham.license_class, expires=ham.expires,
+                source="FCC ULS (weekly snapshot)",
+            )
     if record is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -59,6 +71,8 @@ def signup(
     grid = body.grid.strip() or record.grid
 
     latlon = resolve_location(grid, address_line, city, state, zip_)
+    if latlon is None and ham is not None and ham.lat is not None:
+        latlon = (ham.lat, ham.lon)  # ZIP centroid from the ULS import
 
     user = User(
         callsign=body.callsign,

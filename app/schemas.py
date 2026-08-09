@@ -74,6 +74,7 @@ class LookupResponse(BaseModel):
     grid: str = ""
     license_class: str = ""
     expires: str = ""
+    email: str = ""
     source: str = ""
 
 

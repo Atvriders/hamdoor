@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     # cache TTL for activity responses (shared across users)
     activity_cache_seconds: float = 60.0
     activity_max_spots: int = 200
+    # ---- FCC ULS whole-database import ----
+    uls_import_enabled: bool = True
+    uls_url: str = "https://data.fcc.gov/download/pub/uls/complete/l_amat.zip"
+    geonames_url: str = "https://download.geonames.org/export/zip/US.zip"
+    uls_refresh_days: int = 7
+    # scheduler wakeup interval (hours) for checking refresh staleness
+    uls_check_interval_hours: int = 24
+    # map endpoint caps
+    hams_map_max_results: int = 1500
 
 
 @lru_cache

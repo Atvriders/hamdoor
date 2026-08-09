@@ -63,3 +63,23 @@ class Comment(Base):
 
     post: Mapped[Post] = relationship(back_populates="comments")
     author: Mapped[User] = relationship(back_populates="comments")
+
+
+class Ham(Base):
+    """One row per active US amateur license, imported from the FCC ULS
+    weekly dump. Location is the ZIP centroid — street address and email are
+    stored only for signup prefill and are never exposed via the API."""
+
+    __tablename__ = "hams"
+
+    callsign: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    street: Mapped[str] = mapped_column(String(255), default="")
+    city: Mapped[str] = mapped_column(String(128), default="")
+    state: Mapped[str] = mapped_column(String(32), default="")
+    zip: Mapped[str] = mapped_column(String(16), default="", index=True)
+    email: Mapped[str] = mapped_column(String(255), default="")
+    license_class: Mapped[str] = mapped_column(String(8), default="")
+    expires: Mapped[str] = mapped_column(String(16), default="")
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
