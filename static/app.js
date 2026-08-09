@@ -85,6 +85,7 @@ const VIEWS = ["auth", "feed", "map", "operators", "activity", "profile"];
 function switchView(name) {
   VIEWS.forEach((v) => hide($(`#view-${v}`)));
   show($(`#view-${name}`));
+  document.body.classList.toggle("map-full", name === "map");
   $$(".nav-btn[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   if (name === "feed") loadFeed();
   if (name === "operators") loadOperators();

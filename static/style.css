@@ -117,6 +117,17 @@ button.danger { color: var(--danger); }
 
 #map { height: 65vh; border-radius: 10px; border: 1px solid var(--border); }
 
+/* full-screen map mode: the map fills the viewport below the topbar */
+body.map-full main { max-width: none; margin: 0; padding: 0.4rem 0.6rem; }
+body.map-full #view-map {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+}
+body.map-full #view-map.hidden { display: none; }
+body.map-full #map { flex: 1; height: auto; min-height: 0; }
+body.map-full #view-map > p { display: none; }
+
 .table-wrap { overflow-x: auto; }
 table.spots { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 table.spots th, table.spots td {
