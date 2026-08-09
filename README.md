@@ -26,13 +26,16 @@ What it's used for:
   and **newly licensed hams (first 90 days, tunable via `NEW_HAM_DAYS`) get a
   gold star**.
 
-**Pin locations are street-level**: after the fast initial import (ZIP-code
-centroids, ~1 minute), a background job geocodes every FCC license address
-through the free US Census batch geocoder (~1–2 hours, one time). Results are
-cached in the database, so the weekly ULS refresh only geocodes new or
-changed addresses. Addresses that don't match fall back to a jittered ZIP
-centroid so same-ZIP pins never stack into one dot. FCC license addresses are
-public record; the API never returns the street text, only coordinates.
+**Pin locations are street-level**: a weekly GitHub Actions job
+(`build-uls-data-release`) downloads the FCC extract and geocodes every
+address through the free US Census batch geocoder, publishing
+`geocodes.sqlite.gz` as a release asset. Your container just downloads that
+artifact (~1 minute) and geocodes only the small weekly delta itself. If the
+download fails, it falls back to geocoding everything locally (background,
+~1–2 h once, cached forever after). Addresses that don't match fall back to a
+jittered ZIP centroid so same-ZIP pins never stack into one dot. FCC license
+addresses are public record; the API never returns the street text, only
+coordinates.
 
 ## Neighborhood network
 

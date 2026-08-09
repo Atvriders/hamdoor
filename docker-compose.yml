@@ -44,8 +44,10 @@ services:
       HAMS_MAP_MAX_RESULTS: "10000"             # max individual pins per map viewport
 
       # --- street-level geocoding (Census batch API, free, no key) ---
-      # First run geocodes every FCC address in the background (~1-2 h, one
-      # time); results are cached in the DB so weekly refreshes stay fast.
+      # A weekly CI job pre-geocodes everything and publishes it; the container
+      # downloads that artifact (~1 min) and only geocodes the small delta.
+      DATA_RELEASE_ENABLED: "true"
+      DATA_RELEASE_URL: "https://github.com/Atvriders/hamdoor/releases/download/uls-data-latest/geocodes.sqlite.gz"
       CENSUS_URL: "https://geocoding.geo.census.gov/geocoder/locations/addressbatch"
       CENSUS_BATCH_SIZE: "9000"
       CENSUS_TIMEOUT_SECONDS: "300"

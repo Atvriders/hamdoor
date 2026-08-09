@@ -116,6 +116,36 @@ def test_geocode_backfill(mini_uls_zip, db, monkeypatch):
     assert uls.missing_geocode_addresses() == []
 
 
+def test_fetch_data_release(db, tmp_path, monkeypatch):
+    import gzip
+    import shutil
+    import sqlite3
+
+    # build a tiny release artifact
+    raw = tmp_path / "geocodes.sqlite"
+    conn = sqlite3.connect(raw)
+    conn.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL, quality TEXT)")
+    conn.executemany("INSERT INTO geocodes VALUES (?,?,?,?)",
+                     [("ADDR|ONE|CT|06111", 41.0, -72.0, "Exact"),
+                      ("ADDR|TWO|CT|06103", 42.0, -73.0, "Tie")])
+    conn.commit()
+    conn.close()
+    gz_path = tmp_path / "artifact.gz"
+    with open(raw, "rb") as fi, gzip.open(gz_path, "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+
+    monkeypatch.setattr(uls, "_download",
+                        lambda url, dest, max_age_hours=None: shutil.copy(gz_path, dest))
+    db.query(Geocode).delete()
+    db.commit()
+
+    assert uls.fetch_data_release() == 2
+    assert db.query(Geocode).count() == 2
+    # second merge is a no-op (INSERT OR IGNORE)
+    assert uls.fetch_data_release() == 0
+    assert db.query(Geocode).count() == 2
+
+
 def test_parse_census_response():
     from app.integrations.census_geocoder import parse_batch_response
     sample = (

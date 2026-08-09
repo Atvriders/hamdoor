@@ -327,6 +327,42 @@ def geocode_backfill(limit: int | None = None) -> int:
     return added
 
 
+def fetch_data_release() -> int:
+    """Download the prebuilt weekly geocode cache (built by CI) and merge it
+    into the local geocodes table. Returns rows merged, 0 on any failure —
+    the Census backfill then covers the remainder."""
+    s = get_settings()
+    if not s.data_release_enabled or not s.data_release_url:
+        return 0
+    import gzip
+    import shutil
+
+    dest = os.path.join(_data_dir(), "geocodes_release.sqlite.gz")
+    raw = dest[:-3]
+    try:
+        _download(s.data_release_url, dest)
+        with gzip.open(dest, "rb") as f_in, open(raw + ".partial", "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.replace(raw + ".partial", raw)
+        _ensure_geocode_table()
+        with engine.begin() as conn:
+            conn.execute(text(f"ATTACH DATABASE '{raw}' AS rel"))
+            n = conn.execute(text(
+                "INSERT OR IGNORE INTO geocodes (address_key, lat, lon, quality)"
+                " SELECT address_key, lat, lon, quality FROM rel.geocodes"
+            )).rowcount
+            conn.execute(text("DETACH DATABASE rel"))
+        log.info("[uls] merged %d geocodes from the weekly data release", n)
+        return n
+    except Exception:
+        log.exception("[uls] data release fetch failed — falling back to Census geocoding")
+        return 0
+    finally:
+        for p in (dest, raw, raw + ".partial"):
+            if os.path.exists(p):
+                os.remove(p)
+
+
 def ensure_fresh() -> bool:
     """Keep the hams table current and street-level:
 
@@ -357,19 +393,29 @@ def ensure_fresh() -> bool:
     except Exception:
         missing = 0
     if missing > s.geocode_backfill_threshold:
-        try:
-            geocode_backfill()
-            ok = _run_import() and ok  # re-import with the warm geocode cache
-        except Exception:
-            log.exception("[uls] geocode backfill failed; will retry at next check")
-            ok = False
-        try:
-            remaining = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
-            if remaining > s.geocode_backfill_threshold:
-                log.info("[uls] %d+ addresses still uncached — will resume at next check", remaining)
+        # fast path first: the weekly CI-built geocode cache
+        merged = fetch_data_release()
+        if merged:
+            _run_import()  # re-import with the release cache
+            try:
+                missing = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
+            except Exception:
+                missing = 0
+        # slow path for whatever the release didn't cover (new/changed addresses)
+        if missing > s.geocode_backfill_threshold:
+            try:
+                geocode_backfill()
+                ok = _run_import() and ok  # re-import with the warm geocode cache
+            except Exception:
+                log.exception("[uls] geocode backfill failed; will retry at next check")
                 ok = False
-        except Exception:
-            ok = False
+            try:
+                remaining = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
+                if remaining > s.geocode_backfill_threshold:
+                    log.info("[uls] %d+ addresses still uncached — will resume at next check", remaining)
+                    ok = False
+            except Exception:
+                ok = False
     return ok
 
 

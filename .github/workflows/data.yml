@@ -1,0 +1,39 @@
+name: build-uls-data-release
+
+# Weekly: geocode every FCC address once here, so hamdoor containers download
+# a ready-made geocodes.sqlite.gz instead of hammering the Census geocoder.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"   # Mondays 05:17 UTC, after the FCC's Sunday ULS dump
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: write   # publish the release asset
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build geocodes.sqlite.gz (~2-3 h with Census throttling)
+        env:
+          DATABASE_URL: sqlite:////tmp/hamdoor_data.db
+          SECRET_KEY: ci
+        run: python tools/build_data_release.py
+
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create uls-data-latest \
+            --title "ULS geocode data" \
+            --notes "Weekly geocoded FCC address cache for hamdoor" || true
+          gh release upload uls-data-latest build/geocodes.sqlite.gz --clobber

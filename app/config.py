@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     census_timeout_seconds: float = 300.0
     # backfill runs when more than this many addresses lack a geocode
     geocode_backfill_threshold: int = 500
+    # prebuilt weekly geocode cache (built by CI); containers download this
+    # instead of geocoding everything themselves
+    data_release_url: str = (
+        "https://github.com/Atvriders/hamdoor/releases/download/uls-data-latest/geocodes.sqlite.gz"
+    )
+    data_release_enabled: bool = True
 
 
 @lru_cache
