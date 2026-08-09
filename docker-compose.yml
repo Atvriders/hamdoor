@@ -40,6 +40,7 @@ services:
       # GEONAMES_URL: "https://download.geonames.org/export/zip/US.zip"
       # ULS_REFRESH_DAYS: "7"
       # ULS_CHECK_INTERVAL_HOURS: "24"
+      # NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
     volumes:
       # Named volume (default): zero setup, Docker manages it.
       - hamdoor_data:/data

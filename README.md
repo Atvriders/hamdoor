@@ -20,8 +20,11 @@ What it's used for:
   the licensee published one (editable before submitting).
 - **The map's "All US hams" layer** — every ham in the country, clustered by
   grid cell at low zoom and individual pins (callsign, name, city) from zoom
-  10 in. Locations are **ZIP-code centroids** — street addresses are never
-  exposed by the API.
+  10 in. Pins are colored by license class (Extra/Advanced/General/
+  Technician/Novice/Club), expired-but-in-grace-period licenses show in red,
+  and **newly licensed hams (first 90 days, tunable via `NEW_HAM_DAYS`) get a
+  gold star** so you can spot and welcome newcomers. Locations are
+  **ZIP-code centroids** — street addresses are never exposed by the API.
 
 ## Neighborhood network
 

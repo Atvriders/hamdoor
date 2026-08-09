@@ -444,11 +444,20 @@ async function loadHamLayer() {
         const color = hamColor(h);
         const cls = h.expired ? "EXPIRED — renewal grace period"
                               : (CLASS_NAMES[h.license_class] || "Club / unknown class");
-        L.circleMarker([h.lat, h.lon], {
-          radius: 4, color: color, weight: 1, fillColor: color, fillOpacity: 0.65,
-        }).addTo(state.hamLayer)
-          .bindTooltip(`<b>${esc(h.callsign)}</b> — ${esc(h.name)}<br>${esc(h.city)}, ${esc(h.state)} · ${cls}`,
-                       { direction: "top" });
+        const tip = `<b>${esc(h.callsign)}</b> — ${esc(h.name)}<br>${esc(h.city)}, ${esc(h.state)} · ${cls}` +
+                    (h.new ? `<br>★ newly licensed (${esc(h.granted)})` : "");
+        if (h.new) {
+          // gold-ringed star so new licensees stand out from the dots
+          L.marker([h.lat, h.lon], { icon: L.divIcon({
+            className: "new-ham-icon",
+            html: `<span style="color:${color}">★</span>`,
+            iconSize: [18, 18], iconAnchor: [9, 9],
+          })}).addTo(state.hamLayer).bindTooltip(tip, { direction: "top" });
+        } else {
+          L.circleMarker([h.lat, h.lon], {
+            radius: 4, color: color, weight: 1, fillColor: color, fillOpacity: 0.65,
+          }).addTo(state.hamLayer).bindTooltip(tip, { direction: "top" });
+        }
       });
       status.textContent = `${data.hams.length.toLocaleString()} hams shown` +
         (data.truncated ? " (capped — zoom in further)" : "");

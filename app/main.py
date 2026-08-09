@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db, init_db
+from app.integrations import uls
 from app.models import User
 from app.routes import activity, auth, hams, lookup, operators, posts, users
 from app.scheduler import start_uls_scheduler
@@ -19,6 +20,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    uls.migrate_hams_table()
     start_uls_scheduler()  # imports FCC ULS data on first run, then weekly
     yield
 

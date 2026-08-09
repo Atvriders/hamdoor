@@ -30,6 +30,15 @@ def is_expired(expires: str) -> bool:
         return False
 
 
+def is_new_ham(granted: str) -> bool:
+    """Granted within the configured 'new ham' window (default 90 days)."""
+    try:
+        age = (date.today() - datetime.strptime(granted, "%m/%d/%Y").date()).days
+        return 0 <= age <= get_settings().new_ham_days
+    except (ValueError, TypeError):
+        return False
+
+
 @router.get("/count")
 def hams_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     last = uls.last_import()
@@ -53,7 +62,7 @@ def hams_map(
     if zoom >= _DETAIL_ZOOM:
         rows = db.execute(
             select(Ham.callsign, Ham.name, Ham.city, Ham.state, Ham.lat, Ham.lon,
-                   Ham.license_class, Ham.expires)
+                   Ham.license_class, Ham.expires, Ham.granted)
             .where(Ham.lat.is_not(None),
                    Ham.lat.between(min_lat, max_lat),
                    Ham.lon.between(min_lon, max_lon))
@@ -68,7 +77,9 @@ def hams_map(
             "hams": [{"callsign": r.callsign, "name": r.name, "city": r.city,
                       "state": r.state, "lat": r.lat, "lon": r.lon,
                       "license_class": r.license_class,
-                      "expired": is_expired(r.expires)} for r in rows],
+                      "expired": is_expired(r.expires),
+                      "granted": r.granted,
+                      "new": is_new_ham(r.granted)} for r in rows],
         }
 
     cell = _CELL_BY_ZOOM.get(zoom, 6.0 if zoom < 4 else 0.25)
@@ -106,6 +117,8 @@ def ham_detail(callsign: str, db: Session = Depends(get_db), user: User = Depend
         "license_class": ham.license_class,
         "expires": ham.expires,
         "expired": is_expired(ham.expires),
+        "granted": ham.granted,
+        "new": is_new_ham(ham.granted),
         "lat": ham.lat,
         "lon": ham.lon,
         "registered": db.scalar(select(func.count()).select_from(User).where(User.callsign == cs)) > 0,

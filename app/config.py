@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     uls_check_interval_hours: int = 24
     # map endpoint caps
     hams_map_max_results: int = 1500
+    # a ham is "newly licensed" for this many days after the FCC grant date
+    new_ham_days: int = 90
 
 
 @lru_cache

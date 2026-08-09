@@ -81,5 +81,6 @@ class Ham(Base):
     email: Mapped[str] = mapped_column(String(255), default="")
     license_class: Mapped[str] = mapped_column(String(8), default="")
     expires: Mapped[str] = mapped_column(String(16), default="")
+    granted: Mapped[str] = mapped_column(String(16), default="")  # FCC grant date
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -2,6 +2,7 @@
 no network access."""
 
 import zipfile
+from datetime import date
 
 import pytest
 
@@ -22,9 +23,9 @@ def mini_uls_zip(tmp_path, monkeypatch):
     """A minimal ULS extract: one active individual, one active vanity,
     one terminated license that must be excluded."""
     hd = (
-        _line((0, "HD"), (1, "1001"), (4, "W1QQQ"), (5, "A"), (6, "HA"), (8, "01/01/2035"), total=59) +
-        _line((0, "HD"), (1, "1002"), (4, "W1NVV"), (5, "A"), (6, "HV"), (8, "02/02/2034"), total=59) +
-        _line((0, "HD"), (1, "1003"), (4, "K0OLD"), (5, "T"), (6, "HA"), (8, "03/03/2010"), total=59)
+        _line((0, "HD"), (1, "1001"), (4, "W1QQQ"), (5, "A"), (6, "HA"), (7, "06/15/2020"), (8, "01/01/2035"), total=59) +
+        _line((0, "HD"), (1, "1002"), (4, "W1NVV"), (5, "A"), (6, "HV"), (7, "01/15/2024"), (8, "02/02/2034"), total=59) +
+        _line((0, "HD"), (1, "1003"), (4, "K0OLD"), (5, "T"), (6, "HA"), (7, "05/05/2000"), (8, "03/03/2010"), total=59)
     )
     en = (
         _line((0, "EN"), (1, "1001"), (4, "W1QQQ"), (8, "QUINN"), (9, "Q"), (10, "QUICK"),
@@ -63,6 +64,7 @@ def test_import_hams(mini_uls_zip, db):
     assert q.city == "Newington"
     assert q.license_class == "E"
     assert q.expires == "01/01/2035"
+    assert q.granted == "06/15/2020"
     assert q.lat == pytest.approx(41.69)      # ZIP centroid
     assert q.lon == pytest.approx(-72.73)
 
@@ -112,13 +114,14 @@ def _token(client, db, callsign):
 
 def _seed_hams(db):
     db.query(Ham).delete(synchronize_session=False)
+    recent = date.today().strftime("%m/%d/%Y")
     db.add_all([
         Ham(callsign="AA1A", lat=41.0, lon=-72.0, name="A", city="X", state="CT",
-            license_class="E", expires="01/01/2099"),
+            license_class="E", expires="01/01/2099", granted=recent),  # brand new
         Ham(callsign="AA1B", lat=41.2, lon=-72.2, name="B", city="Y", state="CT",
-            license_class="T", expires="01/01/2099"),
+            license_class="T", expires="01/01/2099", granted="06/15/2010"),
         Ham(callsign="AA1C", lat=35.0, lon=-100.0, name="C", city="Z", state="TX",
-            license_class="G", expires="01/01/2000"),  # past expiry, grace period
+            license_class="G", expires="01/01/2000", granted="06/15/1990"),  # grace period
         Ham(callsign="NOLOC", lat=None, lon=None, name="N", city="?", state="??"),
     ])
     db.commit()
@@ -141,6 +144,8 @@ def test_hams_count_and_map(client, db):
     by_call = {h["callsign"]: h for h in body["hams"]}
     assert by_call["AA1A"]["license_class"] == "E"
     assert by_call["AA1A"]["expired"] is False
+    assert by_call["AA1A"]["new"] is True        # granted today
+    assert by_call["AA1B"]["new"] is False       # granted 2010
 
     # the Texas ham is past its expiration date -> flagged expired
     r = client.get("/api/hams/map?min_lat=34&max_lat=36&min_lon=-101&max_lon=-99&zoom=12",

@@ -155,6 +155,17 @@ table.spots tr:hover td { background: var(--card2); }
   border-radius: 50%;
   margin-right: 0.25em;
 }
+.legend i.star {
+  border-radius: 0;
+  background: none;
+  color: #ffd700;
+  width: auto; height: auto;
+}
+
+.new-ham-icon span {
+  font-size: 15px;
+  text-shadow: 0 0 3px #ffd700, 0 0 2px #000;
+}
 
 @media (max-width: 560px) {
   .row > label { min-width: 45%; }

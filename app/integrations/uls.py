@@ -5,7 +5,8 @@ three of its pipe-delimited member files, and rebuilds the local `hams`
 table:
 
   HD.dat — header:        callsign [4], license_status [5] ('A' = active),
-                          radio_service [6] ('HA'/'HV'), expires [8]
+                          radio_service [6] ('HA'/'HV'), grant_date [7],
+                          expires [8]
   EN.dat — entity:        callsign [4], name [7]/first [8]/last [10],
                           email [14], street [15], city [16], state [17], zip [18]
   AM.dat — amateur detail: callsign [4], operator_class [5]
@@ -44,12 +45,13 @@ CREATE TABLE hams_import (
     email TEXT NOT NULL DEFAULT '',
     license_class TEXT NOT NULL DEFAULT '',
     expires TEXT NOT NULL DEFAULT '',
+    granted TEXT NOT NULL DEFAULT '',
     lat REAL,
     lon REAL
 )"""
 _INSERT_SQL = ("INSERT INTO hams_import (callsign, name, street, city, state, zip,"
-               " email, license_class, expires, lat, lon)"
-               " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+               " email, license_class, expires, granted, lat, lon)"
+               " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 
 
 def _data_dir() -> str:
@@ -135,13 +137,13 @@ def import_hams(zip_path: str | None = None) -> int:
 
     # pass 1 — active licenses
     t0 = time.monotonic()
-    active: dict[str, str] = {}  # callsign -> expires
+    active: dict[str, tuple[str, str]] = {}  # callsign -> (expires, granted)
     with zipfile.ZipFile(tmp_zip) as zf:
         with zf.open("HD.dat") as fh:
             for raw in fh:
                 p = raw.decode("latin-1", errors="replace").rstrip("\r\n").split("|")
                 if len(p) > 8 and p[5] == _ACTIVE_STATUS and p[6] in _SERVICES:
-                    active[p[4].strip().upper()] = p[8].strip()
+                    active[p[4].strip().upper()] = (p[8].strip(), p[7].strip())
     log.info("[uls] %d active licenses (HD pass %.0fs)", len(active), time.monotonic() - t0)
 
     # pass 2 — entity info
@@ -172,11 +174,11 @@ def import_hams(zip_path: str | None = None) -> int:
         conn.execute(text("DROP TABLE IF EXISTS hams_import"))
         conn.execute(text(_CREATE_SQL))
         chunk = []
-        for cs, expires in active.items():
+        for cs, (expires, granted) in active.items():
             e = info.get(cs, ["", "", "", "", "", ""])
             latlon = zips.get(e[4])
             chunk.append((cs, e[0], e[1], e[2], e[3], e[4], e[5],
-                          classes.get(cs, ""), expires,
+                          classes.get(cs, ""), expires, granted,
                           latlon[0] if latlon else None, latlon[1] if latlon else None))
             if len(chunk) >= _CHUNK:
                 conn.exec_driver_sql(_INSERT_SQL, chunk)
@@ -195,6 +197,25 @@ def import_hams(zip_path: str | None = None) -> int:
         os.remove(tmp_zip)
     _touch_marker()
     return count
+
+
+def migrate_hams_table():
+    """Bring an existing hams table up to the current schema between imports.
+
+    Adding a column this way keeps the site running; the marker file is then
+    removed so the scheduler immediately re-imports and populates it.
+    """
+    with engine.begin() as conn:
+        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(hams)"))]
+        if not cols:
+            return  # table doesn't exist yet — init_db/create_all handles it
+        if "granted" not in cols:
+            log.info("[uls] migrating hams table: adding 'granted' column")
+            conn.execute(text("ALTER TABLE hams ADD COLUMN granted TEXT NOT NULL DEFAULT ''"))
+            try:
+                os.remove(_marker_path())  # force re-import to populate it now
+            except OSError:
+                pass
 
 
 def ensure_fresh():
