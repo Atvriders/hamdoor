@@ -2,7 +2,7 @@
 # hamdoor container entrypoint.
 #
 # The app runs as the unprivileged `hamdoor` user (uid 10001). When /data is a
-# host bind mount (e.g. - /home/james/hamdoor:/data) the directory keeps the
+# host bind mount (e.g. - /srv/hamdoor:/data) the directory keeps the
 # host owner's permissions, so we start as root, fix ownership of /data, then
 # drop privileges and exec the real command.
 set -e

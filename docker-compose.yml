@@ -42,12 +42,7 @@ services:
       ULS_CHECK_INTERVAL_HOURS: "24"
       NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
     volumes:
-      # Named volume (default): zero setup, Docker manages it.
       - hamdoor_data:/data
-      # Host bind mount alternative (easy backups/access), e.g.:
-      #   - /home/james/hamdoor:/data
-      # The container entrypoint fixes ownership automatically at startup.
-      # (Manual fix if ever needed: sudo chown -R 10001:10001 <dir>)
     restart: unless-stopped
 
 volumes:
