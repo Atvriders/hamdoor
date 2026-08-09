@@ -396,6 +396,27 @@ async function loadMap() {
   loadHamLayer();
 }
 
+const CLASS_COLORS = {
+  E: "#c792ea",  // Amateur Extra
+  A: "#ff9e64",  // Advanced
+  G: "#7ee787",  // General
+  T: "#4da3ff",  // Technician
+  P: "#e3b341",  // Technician Plus
+  N: "#e3b341",  // Novice
+};
+const CLASS_NAMES = {
+  E: "Amateur Extra", A: "Advanced", G: "General",
+  T: "Technician", P: "Technician Plus", N: "Novice",
+};
+const UNKNOWN_COLOR = "#8fa0b5";   // club stations / no class on record
+const EXPIRED_COLOR = "#ff6b6b";   // past expiration, in renewal grace period
+const CLUSTER_COLOR = "#e3b341";
+
+function hamColor(h) {
+  if (h.expired) return EXPIRED_COLOR;
+  return CLASS_COLORS[h.license_class] || UNKNOWN_COLOR;
+}
+
 async function loadHamLayer() {
   if (!state.map) return;
   state.hamLayer.clearLayers();
@@ -413,17 +434,21 @@ async function loadHamLayer() {
         total += c.count;
         const r = Math.min(28, 6 + Math.log10(c.count) * 7);
         L.circleMarker([c.lat, c.lon], {
-          radius: r, color: "#e3b341", weight: 1, fillColor: "#e3b341", fillOpacity: 0.35,
+          radius: r, color: CLUSTER_COLOR, weight: 1, fillColor: CLUSTER_COLOR, fillOpacity: 0.35,
         }).addTo(state.hamLayer)
           .bindTooltip(`${c.count.toLocaleString()} hams`, { direction: "top" });
       });
       status.textContent = `${total.toLocaleString()} hams in view (zoom in to ${z >= 9 ? "1 more level" : "level 10"} for individual callsigns)`;
     } else {
       data.hams.forEach((h) => {
+        const color = hamColor(h);
+        const cls = h.expired ? "EXPIRED — renewal grace period"
+                              : (CLASS_NAMES[h.license_class] || "Club / unknown class");
         L.circleMarker([h.lat, h.lon], {
-          radius: 4, color: "#4da3ff", weight: 1, fillColor: "#4da3ff", fillOpacity: 0.6,
+          radius: 4, color: color, weight: 1, fillColor: color, fillOpacity: 0.65,
         }).addTo(state.hamLayer)
-          .bindTooltip(`<b>${esc(h.callsign)}</b> — ${esc(h.name)}<br>${esc(h.city)}, ${esc(h.state)}`, { direction: "top" });
+          .bindTooltip(`<b>${esc(h.callsign)}</b> — ${esc(h.name)}<br>${esc(h.city)}, ${esc(h.state)} · ${cls}`,
+                       { direction: "top" });
       });
       status.textContent = `${data.hams.length.toLocaleString()} hams shown` +
         (data.truncated ? " (capped — zoom in further)" : "");

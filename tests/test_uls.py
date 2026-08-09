@@ -113,9 +113,12 @@ def _token(client, db, callsign):
 def _seed_hams(db):
     db.query(Ham).delete(synchronize_session=False)
     db.add_all([
-        Ham(callsign="AA1A", lat=41.0, lon=-72.0, name="A", city="X", state="CT"),
-        Ham(callsign="AA1B", lat=41.2, lon=-72.2, name="B", city="Y", state="CT"),
-        Ham(callsign="AA1C", lat=35.0, lon=-100.0, name="C", city="Z", state="TX"),
+        Ham(callsign="AA1A", lat=41.0, lon=-72.0, name="A", city="X", state="CT",
+            license_class="E", expires="01/01/2099"),
+        Ham(callsign="AA1B", lat=41.2, lon=-72.2, name="B", city="Y", state="CT",
+            license_class="T", expires="01/01/2099"),
+        Ham(callsign="AA1C", lat=35.0, lon=-100.0, name="C", city="Z", state="TX",
+            license_class="G", expires="01/01/2000"),  # past expiry, grace period
         Ham(callsign="NOLOC", lat=None, lon=None, name="N", city="?", state="??"),
     ])
     db.commit()
@@ -135,6 +138,17 @@ def test_hams_count_and_map(client, db):
     body = r.json()
     assert body["type"] == "hams"
     assert {h["callsign"] for h in body["hams"]} == {"AA1A", "AA1B"}
+    by_call = {h["callsign"]: h for h in body["hams"]}
+    assert by_call["AA1A"]["license_class"] == "E"
+    assert by_call["AA1A"]["expired"] is False
+
+    # the Texas ham is past its expiration date -> flagged expired
+    r = client.get("/api/hams/map?min_lat=34&max_lat=36&min_lon=-101&max_lon=-99&zoom=12",
+                   headers=auth(tok))
+    tx = r.json()["hams"][0]
+    assert tx["callsign"] == "AA1C"
+    assert tx["expired"] is True
+    assert tx["license_class"] == "G"
 
     # wide zoom -> clusters with counts
     r = client.get("/api/hams/map?min_lat=30&max_lat=45&min_lon=-105&max_lon=-70&zoom=4",

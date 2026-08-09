@@ -1,6 +1,8 @@
 """Public FCC ULS directory endpoints — every active US ham, clustered on the
 map. Street addresses and emails are never exposed here (ZIP-centroid only)."""
 
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -17,6 +19,15 @@ router = APIRouter(prefix="/api/hams", tags=["hams"])
 # map zoom -> cluster cell size in degrees; at >= 10 individual hams are returned
 _CELL_BY_ZOOM = {4: 5.0, 5: 3.0, 6: 2.0, 7: 1.0, 8: 0.5, 9: 0.25}
 _DETAIL_ZOOM = 10
+
+
+def is_expired(expires: str) -> bool:
+    """ULS keeps licenses with a past expiration date in 'active' status
+    through the 2-year renewal grace period — flag those as expired."""
+    try:
+        return datetime.strptime(expires, "%m/%d/%Y").date() < date.today()
+    except (ValueError, TypeError):
+        return False
 
 
 @router.get("/count")
@@ -41,7 +52,8 @@ def hams_map(
 ):
     if zoom >= _DETAIL_ZOOM:
         rows = db.execute(
-            select(Ham.callsign, Ham.name, Ham.city, Ham.state, Ham.lat, Ham.lon)
+            select(Ham.callsign, Ham.name, Ham.city, Ham.state, Ham.lat, Ham.lon,
+                   Ham.license_class, Ham.expires)
             .where(Ham.lat.is_not(None),
                    Ham.lat.between(min_lat, max_lat),
                    Ham.lon.between(min_lon, max_lon))
@@ -54,7 +66,9 @@ def hams_map(
             "type": "hams",
             "truncated": truncated,
             "hams": [{"callsign": r.callsign, "name": r.name, "city": r.city,
-                      "state": r.state, "lat": r.lat, "lon": r.lon} for r in rows],
+                      "state": r.state, "lat": r.lat, "lon": r.lon,
+                      "license_class": r.license_class,
+                      "expired": is_expired(r.expires)} for r in rows],
         }
 
     cell = _CELL_BY_ZOOM.get(zoom, 6.0 if zoom < 4 else 0.25)
@@ -91,6 +105,7 @@ def ham_detail(callsign: str, db: Session = Depends(get_db), user: User = Depend
         "zip": ham.zip,
         "license_class": ham.license_class,
         "expires": ham.expires,
+        "expired": is_expired(ham.expires),
         "lat": ham.lat,
         "lon": ham.lon,
         "registered": db.scalar(select(func.count()).select_from(User).where(User.callsign == cs)) > 0,

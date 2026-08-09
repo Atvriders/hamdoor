@@ -148,6 +148,14 @@ table.spots tr:hover td { background: var(--card2); }
 .map-toolbar label { margin: 0; }
 .map-toolbar input { margin-top: 0; }
 
+.legend { gap: 0.7rem; margin-bottom: 0.4rem; color: var(--muted); }
+.legend i {
+  display: inline-block;
+  width: 0.7em; height: 0.7em;
+  border-radius: 50%;
+  margin-right: 0.25em;
+}
+
 @media (max-width: 560px) {
   .row > label { min-width: 45%; }
   #map { height: 55vh; }
