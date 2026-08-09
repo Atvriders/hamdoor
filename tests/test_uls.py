@@ -104,7 +104,13 @@ def test_geocode_backfill(mini_uls_zip, db, monkeypatch):
     assert len(missing) == 2                   # both mini-zip hams have streets
 
     fake = {key: (41.7, -72.7, "Exact") for key, *_ in missing}
-    monkeypatch.setattr("app.integrations.census_geocoder.geocode_batch", lambda rows: fake)
+
+    def fake_batch(rows, on_chunk=None):
+        if on_chunk:
+            on_chunk(fake)
+        return fake
+
+    monkeypatch.setattr("app.integrations.census_geocoder.geocode_batch", fake_batch)
     added = uls.geocode_backfill()
     assert added == 2
     assert uls.missing_geocode_addresses() == []

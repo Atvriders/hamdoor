@@ -44,10 +44,13 @@ def parse_batch_response(text: str) -> dict[str, tuple[float, float, str]]:
 
 
 def geocode_batch(rows: list[tuple[str, str, str, str, str]],
-                  pause_seconds: float = 1.0) -> dict[str, tuple[float, float, str]]:
+                  pause_seconds: float = 1.0,
+                  on_chunk=None) -> dict[str, tuple[float, float, str]]:
     """Geocode (id, street, city, state, zip) rows in Census-sized chunks.
 
     Returns {id: (lat, lon, quality)} for matched addresses only.
+    `on_chunk(matched_dict)` fires after every chunk so callers can persist
+    incrementally instead of waiting for the whole run.
     """
     s = get_settings()
     results: dict[str, tuple[float, float, str]] = {}
@@ -76,6 +79,8 @@ def geocode_batch(rows: list[tuple[str, str, str, str, str]],
                     results.update(matched)
                     log.info("[geocode] batch %d/%d: %d/%d matched",
                              n, total_chunks, len(matched), len(part))
+                    if on_chunk and matched:
+                        on_chunk(matched)
                 else:
                     log.warning("[geocode] batch %d/%d HTTP %s", n, total_chunks, resp.status_code)
             except httpx.HTTPError as exc:

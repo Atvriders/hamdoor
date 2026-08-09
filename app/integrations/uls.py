@@ -301,30 +301,28 @@ def missing_geocode_addresses(limit: int | None = None) -> list[tuple[str, str, 
 
 def geocode_backfill(limit: int | None = None) -> int:
     """Geocode uncached addresses via the Census batch API into the
-    persistent geocodes cache. Returns how many were added."""
+    persistent geocodes cache. Writes after EVERY batch, so progress is
+    visible immediately and survives container restarts."""
     from app.integrations.census_geocoder import geocode_batch
 
     rows = missing_geocode_addresses(limit)
     if not rows:
         return 0
     log.info("[uls] geocoding %d uncached addresses via Census batch API…", len(rows))
-    results = geocode_batch(rows)
+
+    _ensure_geocode_table()
     added = 0
-    with engine.begin() as conn:
-        chunk = []
-        for key, (lat, lon, quality) in results.items():
-            chunk.append((key, lat, lon, quality))
-            if len(chunk) >= _CHUNK:
-                conn.exec_driver_sql(
-                    "INSERT OR REPLACE INTO geocodes (address_key, lat, lon, quality)"
-                    " VALUES (?, ?, ?, ?)", chunk)
-                added += len(chunk)
-                chunk = []
-        if chunk:
+
+    def insert_chunk(matched):
+        nonlocal added
+        with engine.begin() as conn:
             conn.exec_driver_sql(
                 "INSERT OR REPLACE INTO geocodes (address_key, lat, lon, quality)"
-                " VALUES (?, ?, ?, ?)", chunk)
-            added += len(chunk)
+                " VALUES (?, ?, ?, ?)",
+                [(k, v[0], v[1], v[2]) for k, v in matched.items()])
+        added += len(matched)
+
+    geocode_batch(rows, on_chunk=insert_chunk)
     log.info("[uls] geocode backfill added %d locations", added)
     return added
 
