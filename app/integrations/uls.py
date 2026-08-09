@@ -327,26 +327,30 @@ def geocode_backfill(limit: int | None = None) -> int:
     return added
 
 
-def ensure_fresh():
+def ensure_fresh() -> bool:
     """Keep the hams table current and street-level:
 
     1. import if the table is empty or stale (uses cached geocodes);
     2. if many addresses lack a geocode, backfill via the Census batch API
        and import again (reusing the just-downloaded extract) so pins move
        from ZIP centroids to street addresses.
+
+    Returns True when everything is done; False when work remains (the
+    scheduler then re-checks in 30 minutes instead of a day).
     """
     s = get_settings()
     if not s.uls_import_enabled:
-        return
+        return True
+    ok = True
     last = last_import()
     if last is not None:
         age_days = (datetime.now(timezone.utc) - last).total_seconds() / 86400
         if age_days >= s.uls_refresh_days:
             log.info("[uls] data is %.1f days old — refreshing", age_days)
-            _run_import()
+            ok = _run_import()
     else:
         log.info("[uls] no previous import — starting initial import")
-        _run_import()
+        ok = _run_import()
 
     try:
         missing = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
@@ -355,13 +359,24 @@ def ensure_fresh():
     if missing > s.geocode_backfill_threshold:
         try:
             geocode_backfill()
-            _run_import()  # re-import with the warm geocode cache
+            ok = _run_import() and ok  # re-import with the warm geocode cache
         except Exception:
             log.exception("[uls] geocode backfill failed; will retry at next check")
+            ok = False
+        try:
+            remaining = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
+            if remaining > s.geocode_backfill_threshold:
+                log.info("[uls] %d+ addresses still uncached — will resume at next check", remaining)
+                ok = False
+        except Exception:
+            ok = False
+    return ok
 
 
-def _run_import():
+def _run_import() -> bool:
     try:
         import_hams()
+        return True
     except Exception:
         log.exception("[uls] import failed; will retry at next check")
+        return False

@@ -18,14 +18,15 @@ def start_uls_scheduler() -> threading.Thread | None:
 
     def loop():
         while True:
-            ok = True
+            complete = True
             try:
-                uls.ensure_fresh()
+                complete = uls.ensure_fresh()
             except Exception:
-                ok = False
+                complete = False
                 log.exception("[uls] refresh check failed")
-            # retry failures sooner than the normal daily check
-            time.sleep(3600 * (s.uls_check_interval_hours if ok else 0.5))
+            # incomplete work (throttled geocoder, failed download) → retry in
+            # 30 min; otherwise normal daily check
+            time.sleep(3600 * (s.uls_check_interval_hours if complete else 0.5))
 
     thread = threading.Thread(target=loop, daemon=True, name="uls-scheduler")
     thread.start()

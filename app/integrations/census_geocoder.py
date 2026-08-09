@@ -43,6 +43,29 @@ def parse_batch_response(text: str) -> dict[str, tuple[float, float, str]]:
     return out
 
 
+def _post_chunk(client: httpx.Client, url: str, csv_text: str, label: str) -> dict:
+    """POST one chunk with backoff — the Census service throttles under load
+    (read timeouts, 502s), so retry instead of skipping the whole batch."""
+    delay = 30.0
+    for attempt in range(1, 5):
+        try:
+            resp = client.post(
+                url,
+                data={"benchmark": "Public_AR_Current"},
+                files={"addressFile": ("addresses.csv", csv_text, "text/csv")},
+            )
+            if resp.status_code == 200:
+                return parse_batch_response(resp.text)
+            log.warning("[geocode] %s HTTP %s (attempt %d/4)", label, resp.status_code, attempt)
+        except httpx.HTTPError as exc:
+            log.warning("[geocode] %s failed (attempt %d/4): %s", label, attempt, exc)
+        if attempt < 4:
+            time.sleep(delay)
+            delay *= 2  # 30s, 60s, 120s between retries
+    log.warning("[geocode] %s skipped after retries (will be retried at next scheduled run)", label)
+    return {}
+
+
 def geocode_batch(rows: list[tuple[str, str, str, str, str]],
                   pause_seconds: float = 1.0,
                   on_chunk=None) -> dict[str, tuple[float, float, str]]:
@@ -68,23 +91,13 @@ def geocode_batch(rows: list[tuple[str, str, str, str, str]],
             for rid, street, city, state, zip_ in part:
                 w.writerow([rid, street, city, state, zip_])
             n = i // chunk + 1
-            try:
-                resp = client.post(
-                    s.census_url,
-                    data={"benchmark": "Public_AR_Current"},
-                    files={"addressFile": ("addresses.csv", buf.getvalue(), "text/csv")},
-                )
-                if resp.status_code == 200:
-                    matched = parse_batch_response(resp.text)
-                    results.update(matched)
-                    log.info("[geocode] batch %d/%d: %d/%d matched",
-                             n, total_chunks, len(matched), len(part))
-                    if on_chunk and matched:
-                        on_chunk(matched)
-                else:
-                    log.warning("[geocode] batch %d/%d HTTP %s", n, total_chunks, resp.status_code)
-            except httpx.HTTPError as exc:
-                log.warning("[geocode] batch %d/%d failed: %s", n, total_chunks, exc)
-            if i + chunk < len(rows):
-                time.sleep(pause_seconds)
+            matched = _post_chunk(client, s.census_url, buf.getvalue(), f"batch {n}/{total_chunks}")
+            if matched:
+                results.update(matched)
+                log.info("[geocode] batch %d/%d: %d/%d matched",
+                         n, total_chunks, len(matched), len(part))
+                if on_chunk:
+                    on_chunk(matched)
+            # back off politely after a failed batch; 1s after successes
+            time.sleep(pause_seconds if matched else 30.0)
     return results
