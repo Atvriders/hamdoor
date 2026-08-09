@@ -345,13 +345,19 @@ def fetch_data_release() -> int:
             shutil.copyfileobj(f_in, f_out)
         os.replace(raw + ".partial", raw)
         _ensure_geocode_table()
-        with engine.begin() as conn:
-            conn.execute(text(f"ATTACH DATABASE '{raw}' AS rel"))
-            n = conn.execute(text(
+        import sqlite3
+        db_path = get_settings().database_url.split("///", 1)[-1]
+        conn = sqlite3.connect(db_path, timeout=30)
+        try:
+            conn.execute(f"ATTACH DATABASE '{raw}' AS rel")
+            n = conn.execute(
                 "INSERT OR IGNORE INTO geocodes (address_key, lat, lon, quality)"
                 " SELECT address_key, lat, lon, quality FROM rel.geocodes"
-            )).rowcount
-            conn.execute(text("DETACH DATABASE rel"))
+            ).rowcount
+            conn.commit()
+            conn.execute("DETACH DATABASE rel")
+        finally:
+            conn.close()
         log.info("[uls] merged %d geocodes from the weekly data release", n)
         return n
     except Exception:
