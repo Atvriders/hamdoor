@@ -18,29 +18,29 @@ services:
       SECRET_KEY: "change-me-to-a-long-random-string"
       DATABASE_URL: "sqlite:////data/hamdoor.db"
 
-      # --- activity toolbox sources (defaults shown; all optional) ---
-      # PSKREPORTER_URL: "https://pskreporter.info/query"
-      # WSPR_LIVE_URL: "https://db1.wspr.live/"
-      # POTA_URL: "https://api.pota.app/spot/activator"
-      # SOTA_URL: "https://api2.sota.org.uk/api/spots/-2/h/all"
-      # HAMQSL_URL: "https://www.hamqsl.com/solarxml.php"
-      # APRS_HOST: "rotate.aprs2.net"
-      # APRS_PORT: "14580"
-      # DXC_HOST: "ve7cc.net"                     # DX cluster telnet node
-      # DXC_PORT: "23"
-      # RBN_HOST: "telnet.reversebeacon.net"      # CW Reverse Beacon Network
-      # RBN_PORT: "7000"
-      # ACTIVITY_SAMPLE_SECONDS: "15"             # live sample window per request
-      # ACTIVITY_CACHE_SECONDS: "60"              # shared response cache
-      # ACTIVITY_MAX_SPOTS: "200"
+      # --- activity toolbox sources ---
+      PSKREPORTER_URL: "https://pskreporter.info/query"
+      WSPR_LIVE_URL: "https://db1.wspr.live/"
+      POTA_URL: "https://api.pota.app/spot/activator"
+      SOTA_URL: "https://api2.sota.org.uk/api/spots/-2/h/all"
+      HAMQSL_URL: "https://www.hamqsl.com/solarxml.php"
+      APRS_HOST: "rotate.aprs2.net"
+      APRS_PORT: "14580"
+      DXC_HOST: "ve7cc.net"                     # DX cluster telnet node
+      DXC_PORT: "23"
+      RBN_HOST: "telnet.reversebeacon.net"      # CW Reverse Beacon Network
+      RBN_PORT: "7000"
+      ACTIVITY_SAMPLE_SECONDS: "15"             # live sample window per request
+      ACTIVITY_CACHE_SECONDS: "60"              # shared response cache
+      ACTIVITY_MAX_SPOTS: "200"
 
-      # --- FCC ULS whole-database import (defaults shown; all optional) ---
-      # ULS_IMPORT_ENABLED: "true"                # weekly auto-refresh of all US hams
-      # ULS_URL: "https://data.fcc.gov/download/pub/uls/complete/l_amat.zip"
-      # GEONAMES_URL: "https://download.geonames.org/export/zip/US.zip"
-      # ULS_REFRESH_DAYS: "7"
-      # ULS_CHECK_INTERVAL_HOURS: "24"
-      # NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
+      # --- FCC ULS whole-database import ---
+      ULS_IMPORT_ENABLED: "true"                # weekly auto-refresh of all US hams
+      ULS_URL: "https://data.fcc.gov/download/pub/uls/complete/l_amat.zip"
+      GEONAMES_URL: "https://download.geonames.org/export/zip/US.zip"
+      ULS_REFRESH_DAYS: "7"
+      ULS_CHECK_INTERVAL_HOURS: "24"
+      NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
     volumes:
       # Named volume (default): zero setup, Docker manages it.
       - hamdoor_data:/data
