@@ -355,7 +355,7 @@ $("#ops-refresh").addEventListener("click", loadOperators);
 
 async function loadMap() {
   if (!state.map) {
-    state.map = L.map("map");
+    state.map = L.map("map", { preferCanvas: true });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from app.integrations import uls
-from app.models import Ham
+from app.models import Geocode, Ham
 from tests.conftest import auth, signup
 
 
@@ -53,6 +53,8 @@ def mini_uls_zip(tmp_path, monkeypatch):
 
 
 def test_import_hams(mini_uls_zip, db):
+    db.query(Geocode).delete()
+    db.commit()
     count = uls.import_hams(zip_path=mini_uls_zip)
     assert count == 2  # K0OLD is terminated and must not appear
 
@@ -65,8 +67,10 @@ def test_import_hams(mini_uls_zip, db):
     assert q.license_class == "E"
     assert q.expires == "01/01/2035"
     assert q.granted == "06/15/2020"
-    assert q.lat == pytest.approx(41.69)      # ZIP centroid
-    assert q.lon == pytest.approx(-72.73)
+    # no geocode cached -> jittered ZIP centroid, stays near 06111
+    assert q.lat == pytest.approx(41.69, abs=0.05)
+    assert q.lon == pytest.approx(-72.73, abs=0.05)
+    assert q.loc_source == "zip"
 
     v = db.get(Ham, "W1NVV")
     assert v is not None                       # vanity service HV included
@@ -74,6 +78,51 @@ def test_import_hams(mini_uls_zip, db):
     assert db.get(Ham, "K0OLD") is None
 
     assert uls.last_import() is not None       # marker written
+
+
+def test_import_uses_cached_street_geocode(mini_uls_zip, db):
+    from app.integrations.census_geocoder import address_key
+    db.query(Geocode).delete()
+    db.commit()
+    db.add(Geocode(address_key=address_key("10 OAK ST", "Newington", "CT", "06111"),
+                   lat=41.71489, lon=-72.72687, quality="Exact"))
+    db.commit()
+    uls.import_hams(zip_path=mini_uls_zip)
+    q = db.get(Ham, "W1QQQ")
+    assert q.lat == pytest.approx(41.71489, abs=1e-5)   # exact street location
+    assert q.lon == pytest.approx(-72.72687, abs=1e-5)
+    assert q.loc_source == "address"
+    # the un-geocoded ham still falls back to its ZIP centroid
+    assert db.get(Ham, "W1NVV").loc_source == "zip"
+
+
+def test_geocode_backfill(mini_uls_zip, db, monkeypatch):
+    db.query(Geocode).delete()
+    db.commit()
+    uls.import_hams(zip_path=mini_uls_zip)
+    missing = uls.missing_geocode_addresses()
+    assert len(missing) == 2                   # both mini-zip hams have streets
+
+    fake = {key: (41.7, -72.7, "Exact") for key, *_ in missing}
+    monkeypatch.setattr("app.integrations.census_geocoder.geocode_batch", lambda rows: fake)
+    added = uls.geocode_backfill()
+    assert added == 2
+    assert uls.missing_geocode_addresses() == []
+
+
+def test_parse_census_response():
+    from app.integrations.census_geocoder import parse_batch_response
+    sample = (
+        '"1","225 Main St, Newington, CT, 06111","Match","Exact",'
+        '"225 MAIN ST, NEWINGTON, CT, 06111","-72.72687,41.71489","3514734","R"\n'
+        '"2","1 Infinite Loop, Cupertino, CA, 95014","No_Match"\n'
+        '"3","1 Main St, Nowhere, CT, 06001","Tie","Exact",'
+        '"1 MAIN ST, NOWHERE, CT, 06001","-72.70,41.70","123","L"\n'
+    )
+    out = parse_batch_response(sample)
+    assert out["1"] == (41.71489, -72.72687, "Exact")
+    assert "2" not in out                       # No_Match dropped
+    assert out["3"][0] == pytest.approx(41.70)  # Tie accepted
 
 
 def test_import_swap_replaces_data(mini_uls_zip, db):
@@ -102,7 +151,7 @@ def test_signup_via_local_uls_only(client, mini_uls_zip, db, monkeypatch):
     monkeypatch.setattr("app.routes.auth.resolve_location", lambda *a: None)
     data = signup(client, "W1QQQ")
     assert data["user"]["name"] == "Quinn Q Quick"
-    assert data["user"]["lat"] == pytest.approx(41.69)
+    assert data["user"]["lat"] == pytest.approx(41.69, abs=0.05)
 
 
 def _token(client, db, callsign):

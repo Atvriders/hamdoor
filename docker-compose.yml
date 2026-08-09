@@ -41,6 +41,15 @@ services:
       ULS_REFRESH_DAYS: "7"
       ULS_CHECK_INTERVAL_HOURS: "24"
       NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
+      HAMS_MAP_MAX_RESULTS: "10000"             # max individual pins per map viewport
+
+      # --- street-level geocoding (Census batch API, free, no key) ---
+      # First run geocodes every FCC address in the background (~1-2 h, one
+      # time); results are cached in the DB so weekly refreshes stay fast.
+      CENSUS_URL: "https://geocoding.geo.census.gov/geocoder/locations/addressbatch"
+      CENSUS_BATCH_SIZE: "9000"
+      CENSUS_TIMEOUT_SECONDS: "300"
+      GEOCODE_BACKFILL_THRESHOLD: "500"         # backfill when more missing than this
     volumes:
       - hamdoor_data:/data
     restart: unless-stopped

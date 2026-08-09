@@ -11,12 +11,16 @@ table:
                           email [14], street [15], city [16], state [17], zip [18]
   AM.dat — amateur detail: callsign [4], operator_class [5]
 
-Locations come from a GeoNames US ZIP centroid table (no street geocoding).
+Locations come from a GeoNames US ZIP centroid table (no street geocoding),
+plus a small deterministic per-callsign offset so hams sharing a ZIP don't
+stack into a single map pin (and exact centroids never identify a street).
 The table is built as `hams_import` and swapped in atomically, so the site
 keeps serving the old data during the multi-minute import.
 """
 
+import hashlib
 import logging
+import math
 import os
 import time
 import zipfile
@@ -47,11 +51,12 @@ CREATE TABLE hams_import (
     expires TEXT NOT NULL DEFAULT '',
     granted TEXT NOT NULL DEFAULT '',
     lat REAL,
-    lon REAL
+    lon REAL,
+    loc_source TEXT NOT NULL DEFAULT ''
 )"""
 _INSERT_SQL = ("INSERT INTO hams_import (callsign, name, street, city, state, zip,"
-               " email, license_class, expires, granted, lat, lon)"
-               " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+               " email, license_class, expires, granted, lat, lon, loc_source)"
+               " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 
 
 def _data_dir() -> str:
@@ -77,7 +82,12 @@ def _touch_marker():
         fh.write(datetime.now(timezone.utc).isoformat())
 
 
-def _download(url: str, dest: str):
+def _download(url: str, dest: str, max_age_hours: float | None = None):
+    if max_age_hours is not None and os.path.exists(dest):
+        age_h = (time.time() - os.path.getmtime(dest)) / 3600
+        if age_h < max_age_hours:
+            log.info("[uls] reusing %s (%.1f h old)", dest, age_h)
+            return
     log.info("[uls] downloading %s …", url)
     s = get_settings()
     with httpx.stream("GET", url, timeout=60.0, follow_redirects=True,
@@ -126,14 +136,49 @@ def _first_line_fields(row: list[str], idx: int) -> str:
     return row[idx].strip() if len(row) > idx else ""
 
 
+def jitter_latlon(callsign: str, lat: float, lon: float) -> tuple[float, float]:
+    """Deterministic offset within ~4 km of the ZIP centroid, stable per
+    callsign across re-imports. Un-stacks same-ZIP pins on the map."""
+    h = int.from_bytes(hashlib.sha1(callsign.encode()).digest()[:8], "big")
+    frac_r = (h & 0xFFFFFFFF) / 2**32
+    frac_a = (h >> 32) / 2**32
+    r = 0.035 * math.sqrt(frac_r)          # uniform over the disc, ≤ ~0.035°
+    theta = 2 * math.pi * frac_a
+    dlat = r * math.cos(theta)
+    dlon = r * math.sin(theta) / max(0.2, math.cos(math.radians(lat)))
+    return (round(lat + dlat, 5), round(lon + dlon, 5))
+
+
+def _ensure_geocode_table():
+    from app.models import Geocode
+    Geocode.__table__.create(engine, checkfirst=True)
+
+
 def import_hams(zip_path: str | None = None) -> int:
-    """Full rebuild of the hams table. Returns the row count imported."""
+    """Full rebuild of the hams table. Returns the row count imported.
+
+    Locations: Census-geocoded street address when cached, otherwise the
+    jittered ZIP centroid. Reuses a recently-downloaded extract (< 20 h)
+    so the post-backfill re-import doesn't fetch 200 MB again.
+    """
     s = get_settings()
     tmp_zip = zip_path or os.path.join(_data_dir(), "l_amat.zip")
     if zip_path is None:
-        _download(s.uls_url, tmp_zip)
+        _download(s.uls_url, tmp_zip, max_age_hours=20)
 
+    _ensure_geocode_table()
     zips = load_zip_centroids()
+
+    # cached street-level geocodes: address_key -> (lat, lon)
+    from app.integrations.census_geocoder import address_key
+    geocache: dict[str, tuple[float, float]] = {}
+    try:
+        with engine.begin() as conn:
+            for key, lat, lon in conn.execute(text("SELECT address_key, lat, lon FROM geocodes")):
+                geocache[key] = (lat, lon)
+    except Exception:
+        pass  # geocodes table not created yet
+    log.info("[uls] %d cached geocodes", len(geocache))
 
     # pass 1 — active licenses
     t0 = time.monotonic()
@@ -174,12 +219,23 @@ def import_hams(zip_path: str | None = None) -> int:
         conn.execute(text("DROP TABLE IF EXISTS hams_import"))
         conn.execute(text(_CREATE_SQL))
         chunk = []
+        n_addr = n_zip = 0
         for cs, (expires, granted) in active.items():
             e = info.get(cs, ["", "", "", "", "", ""])
-            latlon = zips.get(e[4])
+            geo = geocache.get(address_key(e[1], e[2], e[3], e[4])) if e[1] else None
+            if geo:
+                lat, lon, src = geo[0], geo[1], "address"
+                n_addr += 1
+            else:
+                centroid = zips.get(e[4])
+                if centroid:
+                    lat, lon = jitter_latlon(cs, *centroid)
+                    src = "zip"
+                    n_zip += 1
+                else:
+                    lat, lon, src = None, None, ""
             chunk.append((cs, e[0], e[1], e[2], e[3], e[4], e[5],
-                          classes.get(cs, ""), expires, granted,
-                          latlon[0] if latlon else None, latlon[1] if latlon else None))
+                          classes.get(cs, ""), expires, granted, lat, lon, src))
             if len(chunk) >= _CHUNK:
                 conn.exec_driver_sql(_INSERT_SQL, chunk)
                 count += len(chunk)
@@ -191,10 +247,12 @@ def import_hams(zip_path: str | None = None) -> int:
         conn.execute(text("ALTER TABLE hams_import RENAME TO hams"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_hams_lat_lon ON hams (lat, lon)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_hams_zip ON hams (zip)"))
-    log.info("[uls] swapped in %d rows (%.0fs total)", count, time.monotonic() - t0)
+    log.info("[uls] swapped in %d rows (%d street-level, %d ZIP-level) (%.0fs total)",
+             count, n_addr, n_zip, time.monotonic() - t0)
 
-    if zip_path is None:
-        os.remove(tmp_zip)
+    if zip_path is None and os.path.exists(tmp_zip) and \
+            time.time() - os.path.getmtime(tmp_zip) > s.uls_refresh_days * 86400:
+        os.remove(tmp_zip)  # stale extract; keep recent ones for re-imports
     _touch_marker()
     return count
 
@@ -216,22 +274,95 @@ def migrate_hams_table():
                 os.remove(_marker_path())  # force re-import to populate it now
             except OSError:
                 pass
+        if "loc_source" not in cols:
+            log.info("[uls] migrating hams table: adding 'loc_source' column")
+            conn.execute(text("ALTER TABLE hams ADD COLUMN loc_source TEXT NOT NULL DEFAULT ''"))
+
+
+def missing_geocode_addresses(limit: int | None = None) -> list[tuple[str, str, str, str, str]]:
+    """Distinct addresses from the current hams table that have no cached
+    geocode, as (address_key, street, city, state, zip) rows."""
+    from app.integrations.census_geocoder import address_key
+
+    _ensure_geocode_table()
+    with engine.begin() as conn:
+        cached = {r[0] for r in conn.execute(text("SELECT address_key FROM geocodes"))}
+        rows = conn.execute(text(
+            "SELECT DISTINCT street, city, state, zip FROM hams WHERE street <> ''"
+        )).all()
+    missing = []
+    for street, city, state, zip_ in rows:
+        if address_key(street, city, state, zip_) not in cached:
+            missing.append((address_key(street, city, state, zip_), street, city, state, zip_))
+            if limit and len(missing) >= limit:
+                break
+    return missing
+
+
+def geocode_backfill(limit: int | None = None) -> int:
+    """Geocode uncached addresses via the Census batch API into the
+    persistent geocodes cache. Returns how many were added."""
+    from app.integrations.census_geocoder import geocode_batch
+
+    rows = missing_geocode_addresses(limit)
+    if not rows:
+        return 0
+    log.info("[uls] geocoding %d uncached addresses via Census batch API…", len(rows))
+    results = geocode_batch(rows)
+    added = 0
+    with engine.begin() as conn:
+        chunk = []
+        for key, (lat, lon, quality) in results.items():
+            chunk.append((key, lat, lon, quality))
+            if len(chunk) >= _CHUNK:
+                conn.exec_driver_sql(
+                    "INSERT OR REPLACE INTO geocodes (address_key, lat, lon, quality)"
+                    " VALUES (?, ?, ?, ?)", chunk)
+                added += len(chunk)
+                chunk = []
+        if chunk:
+            conn.exec_driver_sql(
+                "INSERT OR REPLACE INTO geocodes (address_key, lat, lon, quality)"
+                " VALUES (?, ?, ?, ?)", chunk)
+            added += len(chunk)
+    log.info("[uls] geocode backfill added %d locations", added)
+    return added
 
 
 def ensure_fresh():
-    """Import if the table is empty or the last import is older than the
-    configured refresh period. Called by the scheduler and at startup."""
+    """Keep the hams table current and street-level:
+
+    1. import if the table is empty or stale (uses cached geocodes);
+    2. if many addresses lack a geocode, backfill via the Census batch API
+       and import again (reusing the just-downloaded extract) so pins move
+       from ZIP centroids to street addresses.
+    """
     s = get_settings()
     if not s.uls_import_enabled:
         return
     last = last_import()
     if last is not None:
         age_days = (datetime.now(timezone.utc) - last).total_seconds() / 86400
-        if age_days < s.uls_refresh_days:
-            return
-        log.info("[uls] data is %.1f days old — refreshing", age_days)
+        if age_days >= s.uls_refresh_days:
+            log.info("[uls] data is %.1f days old — refreshing", age_days)
+            _run_import()
     else:
         log.info("[uls] no previous import — starting initial import")
+        _run_import()
+
+    try:
+        missing = len(missing_geocode_addresses(limit=s.geocode_backfill_threshold + 1))
+    except Exception:
+        missing = 0
+    if missing > s.geocode_backfill_threshold:
+        try:
+            geocode_backfill()
+            _run_import()  # re-import with the warm geocode cache
+        except Exception:
+            log.exception("[uls] geocode backfill failed; will retry at next check")
+
+
+def _run_import():
     try:
         import_hams()
     except Exception:

@@ -58,6 +58,8 @@ def client():
 
 @pytest.fixture()
 def db():
+    from app.db import init_db
+    init_db()  # idempotent create_all — covers tests that never hit the web app
     session = SessionLocal()
     try:
         yield session

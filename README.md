@@ -18,13 +18,21 @@ What it's used for:
 - **Signup prefill** — the lookup endpoint now answers from the local FCC
   snapshot when callook.info misses or is down, including the **email** when
   the licensee published one (editable before submitting).
-- **The map's "All US hams" layer** — every ham in the country, clustered by
-  grid cell at low zoom and individual pins (callsign, name, city) from zoom
-  10 in. Pins are colored by license class (Extra/Advanced/General/
+- **The map's "All US hams" layer** — every ham in the country. Zoomed out
+  you get count bubbles; from zoom 10 in you see **every single ham** as an
+  individual pin (up to `HAMS_MAP_MAX_RESULTS` per viewport — zoom further in
+  dense metros). Pins are colored by license class (Extra/Advanced/General/
   Technician/Novice/Club), expired-but-in-grace-period licenses show in red,
   and **newly licensed hams (first 90 days, tunable via `NEW_HAM_DAYS`) get a
-  gold star** so you can spot and welcome newcomers. Locations are
-  **ZIP-code centroids** — street addresses are never exposed by the API.
+  gold star**.
+
+**Pin locations are street-level**: after the fast initial import (ZIP-code
+centroids, ~1 minute), a background job geocodes every FCC license address
+through the free US Census batch geocoder (~1–2 hours, one time). Results are
+cached in the database, so the weekly ULS refresh only geocodes new or
+changed addresses. Addresses that don't match fall back to a jittered ZIP
+centroid so same-ZIP pins never stack into one dot. FCC license addresses are
+public record; the API never returns the street text, only coordinates.
 
 ## Neighborhood network
 

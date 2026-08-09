@@ -46,9 +46,15 @@ class Settings(BaseSettings):
     # scheduler wakeup interval (hours) for checking refresh staleness
     uls_check_interval_hours: int = 24
     # map endpoint caps
-    hams_map_max_results: int = 1500
+    hams_map_max_results: int = 10000
     # a ham is "newly licensed" for this many days after the FCC grant date
     new_ham_days: int = 90
+    # ---- Census batch geocoding (street-level ham locations) ----
+    census_url: str = "https://geocoding.geo.census.gov/geocoder/locations/addressbatch"
+    census_batch_size: int = 9000
+    census_timeout_seconds: float = 300.0
+    # backfill runs when more than this many addresses lack a geocode
+    geocode_backfill_threshold: int = 500
 
 
 @lru_cache

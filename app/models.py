@@ -67,7 +67,8 @@ class Comment(Base):
 
 class Ham(Base):
     """One row per active US amateur license, imported from the FCC ULS
-    weekly dump. Location is the ZIP centroid — street address and email are
+    weekly dump. Location is the geocoded street address when available
+    (falling back to the ZIP centroid) — street address and email text are
     stored only for signup prefill and are never exposed via the API."""
 
     __tablename__ = "hams"
@@ -84,3 +85,18 @@ class Ham(Base):
     granted: Mapped[str] = mapped_column(String(16), default="")  # FCC grant date
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # "address" = Census-geocoded street location, "zip" = centroid fallback
+    loc_source: Mapped[str] = mapped_column(String(16), default="")
+
+
+class Geocode(Base):
+    """Persistent address → lat/lon cache (Census batch geocoder results).
+    Survives the weekly hams table rebuild so only new/changed addresses
+    ever need geocoding."""
+
+    __tablename__ = "geocodes"
+
+    address_key: Mapped[str] = mapped_column(String(400), primary_key=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    quality: Mapped[str] = mapped_column(String(16), default="")
