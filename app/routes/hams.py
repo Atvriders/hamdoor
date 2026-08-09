@@ -42,8 +42,18 @@ def is_new_ham(granted: str) -> bool:
 @router.get("/count")
 def hams_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     last = uls.last_import()
+    by_source = dict(
+        db.execute(text("SELECT loc_source, COUNT(*) FROM hams GROUP BY loc_source")).all()
+    )
+    try:
+        geocodes = db.scalar(text("SELECT COUNT(*) FROM geocodes")) or 0
+    except Exception:
+        geocodes = 0
     return {
         "count": db.scalar(select(func.count()).select_from(Ham)) or 0,
+        "street_level": by_source.get("address", 0),
+        "zip_level": by_source.get("zip", 0),
+        "geocodes_cached": geocodes,
         "last_import": last.isoformat() if last else None,
         "source": "FCC ULS weekly amateur extract",
     }

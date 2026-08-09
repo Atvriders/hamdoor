@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from hashlib import sha1
 from pathlib import Path
+import logging
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -30,6 +31,16 @@ def _static_version() -> str:
 
 
 STATIC_VERSION = _static_version()
+
+# make importer/geocoder progress visible in `docker compose logs`, independent
+# of uvicorn's logging config (which can swallow root/basicConfig output)
+_app_log = logging.getLogger("app")
+if not any(isinstance(h, logging.StreamHandler) for h in _app_log.handlers):
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    _app_log.addHandler(_h)
+_app_log.setLevel(logging.INFO)
+_app_log.propagate = False
 
 
 @asynccontextmanager
