@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.integrations.geocode import resolve_location
+from app.integrations.geocode import resolve_user_location
 from app.integrations.provider import CallsignProvider, CallsignRecord, get_provider
 from app.models import Ham, User
 from app.schemas import (
@@ -70,7 +70,7 @@ def signup(
     zip_ = body.zip.strip() or record.zip
     grid = body.grid.strip() or record.grid
 
-    latlon = resolve_location(grid, address_line, city, state, zip_)
+    latlon = resolve_user_location(db, body.callsign, grid, address_line, city, state, zip_)
     if latlon is None and ham is not None and ham.lat is not None:
         latlon = (ham.lat, ham.lon)  # ZIP centroid from the ULS import
 

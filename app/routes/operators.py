@@ -12,14 +12,15 @@ router = APIRouter(prefix="/api/operators", tags=["operators"])
 
 
 def public_location(user: User) -> tuple[float | None, float | None]:
-    """Location shown to other users: grid-square center if known, otherwise
-    the stored point rounded to ~1 km. Street address is never exposed."""
+    """Location shown to other users. Stored locations are the user's FCC
+    address geocode (the same point the public directory map already shows),
+    falling back to grid-square center. Street text/email are never exposed."""
+    if user.lat is not None and user.lon is not None:
+        return (user.lat, user.lon)
     if user.grid:
         ll = grid_to_latlon(user.grid)
         if ll:
             return ll
-    if user.lat is not None and user.lon is not None:
-        return (round(user.lat, 2), round(user.lon, 2))
     return (None, None)
 
 

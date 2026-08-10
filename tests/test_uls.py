@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from app.integrations import uls
-from app.models import Geocode, Ham
+from app.models import Geocode, Ham, User
 from tests.conftest import auth, signup
 
 
@@ -182,12 +182,33 @@ def test_lookup_falls_back_to_local_uls(client, mini_uls_zip, db):
 
 
 def test_signup_via_local_uls_only(client, mini_uls_zip, db, monkeypatch):
+    db.query(Geocode).delete()
+    db.commit()
     uls.import_hams(zip_path=mini_uls_zip)
     # no network geocoding in tests; the ham's ZIP centroid should be used
-    monkeypatch.setattr("app.routes.auth.resolve_location", lambda *a: None)
+    monkeypatch.setattr("app.integrations.geocode.resolve_location", lambda *a: None)
     data = signup(client, "W1QQQ")
     assert data["user"]["name"] == "Quinn Q Quick"
     assert data["user"]["lat"] == pytest.approx(41.69, abs=0.05)
+
+
+def test_existing_user_snapped_to_street_level(client, mini_uls_zip, db):
+    from app.integrations.census_geocoder import address_key
+    from app.routes.users import sync_user_locations
+
+    db.query(Geocode).delete()
+    db.add(Geocode(address_key=address_key("10 OAK ST", "Newington", "CT", "06111"),
+                   lat=41.71489, lon=-72.72687, quality="Exact"))
+    db.commit()
+    uls.import_hams(zip_path=mini_uls_zip)
+
+    # W1QQQ signed up earlier with a ZIP-centroid location; its profile still
+    # carries the FCC address, so the sync should snap it to street level
+    moved = sync_user_locations(db)
+    assert moved == 1
+    user = db.query(User).filter_by(callsign="W1QQQ").one()
+    assert user.lat == pytest.approx(41.71489, abs=1e-5)
+    assert user.lon == pytest.approx(-72.72687, abs=1e-5)
 
 
 def _token(client, db, callsign):

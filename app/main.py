@@ -10,10 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import get_db, init_db
+from app.db import SessionLocal, get_db, init_db
 from app.integrations import uls
 from app.models import User
-from app.routes import activity, auth, hams, lookup, operators, posts, users
+from app.routes import activity, auth, hams, lookup, operators, posts
+from app.routes import users as users_route
 from app.scheduler import start_uls_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -47,6 +48,8 @@ _app_log.propagate = False
 async def lifespan(_: FastAPI):
     init_db()
     uls.migrate_hams_table()
+    with SessionLocal() as db:
+        users_route.sync_user_locations(db)  # snap users to street-level geocodes
     start_uls_scheduler()  # imports FCC ULS data on first run, then weekly
     yield
 
@@ -55,7 +58,7 @@ app = FastAPI(title="hamdoor", version="1.0.0", docs_url="/api/docs", openapi_ur
 
 app.include_router(auth.router)
 app.include_router(lookup.router)
-app.include_router(users.router)
+app.include_router(users_route.router)
 app.include_router(operators.router)
 app.include_router(posts.router)
 app.include_router(activity.router)

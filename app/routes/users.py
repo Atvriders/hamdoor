@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.integrations.geocode import resolve_location
+from app.integrations.geocode import resolve_user_location
 from app.integrations.provider import CallsignProvider, get_provider
 from app.models import User
 from app.routes.auth import user_self
@@ -26,7 +26,8 @@ def update_me(body: UserUpdate, user: User = Depends(get_current_user), db: Sess
     for key, value in updates.items():
         setattr(user, key, value.strip() if isinstance(value, str) else value)
     if address_touched:
-        latlon = resolve_location(user.grid, user.address_line, user.city, user.state, user.zip)
+        latlon = resolve_user_location(db, user.callsign, user.grid, user.address_line,
+                                       user.city, user.state, user.zip)
         user.lat, user.lon = (latlon if latlon else (None, None))
     db.commit()
     db.refresh(user)
@@ -61,8 +62,38 @@ def refresh_callsign(
     user.state = record.state or user.state
     user.zip = record.zip or user.zip
     user.grid = record.grid or user.grid
-    latlon = resolve_location(user.grid, user.address_line, user.city, user.state, user.zip)
+    latlon = resolve_user_location(db, user.callsign, user.grid, user.address_line,
+                                   user.city, user.state, user.zip)
     user.lat, user.lon = (latlon if latlon else (None, None))
     db.commit()
     db.refresh(user)
     return user_self(user)
+
+
+def sync_user_locations(db: Session) -> int:
+    """Snap registered users' locations to their street-level FCC geocode,
+    but only when their profile still carries the FCC address (a user-edited
+    address is respected). Returns how many users were moved."""
+    import logging
+
+    from app.models import Ham
+
+    log = logging.getLogger("app.routes.users")
+    moved = 0
+    try:
+        for u in db.query(User).all():
+            ham = db.get(Ham, u.callsign)
+            if not ham or ham.lat is None or ham.loc_source != "address":
+                continue
+            if (u.address_line or "").strip().upper() != (ham.street or "").strip().upper():
+                continue  # user edited their address — leave their location alone
+            if (u.lat, u.lon) != (ham.lat, ham.lon):
+                u.lat, u.lon = ham.lat, ham.lon
+                moved += 1
+        if moved:
+            db.commit()
+            log.info("[uls] snapped %d user location(s) to street-level geocodes", moved)
+    except Exception:
+        db.rollback()
+        log.warning("[uls] user location sync skipped", exc_info=True)
+    return moved

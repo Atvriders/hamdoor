@@ -47,3 +47,23 @@ def resolve_location(grid: str, address_line: str, city: str, state: str, zip_: 
         if ll:
             return ll
     return geocode_address(address_line, city, state, zip_)
+
+
+def resolve_user_location(db, callsign: str, grid: str, address_line: str,
+                          city: str, state: str, zip_: str) -> tuple[float, float] | None:
+    """Best location for a registered user.
+
+    Prefers the local FCC street-level geocode (the same pin the directory
+    map shows), then grid square, then Nominatim, then the ZIP centroid.
+    """
+    from app.models import Ham
+
+    ham = db.get(Ham, callsign) if callsign else None
+    if ham is not None and ham.lat is not None and ham.loc_source == "address":
+        return (ham.lat, ham.lon)
+    ll = resolve_location(grid, address_line, city, state, zip_)
+    if ll:
+        return ll
+    if ham is not None and ham.lat is not None:
+        return (ham.lat, ham.lon)
+    return None
