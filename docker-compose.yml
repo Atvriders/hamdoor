@@ -18,6 +18,10 @@ services:
     environment:
       # --- logins: blank = a random key kept in /data/secret_key ---
       SECRET_KEY: ""
+      # Admins: your callsign, e.g. N0CALL; several: N0CALL, W1XYZ — admins can
+      # reset passwords, unlock and delete accounts (You → Admin). Sign up with
+      # a callsign before you list it. Blank = no admins.
+      ADMIN_CALLSIGNS: ""
       DATABASE_URL: "sqlite:////data/hamdoor.db"
       # SQLite write-ahead log; set "false" only if /data is a network or FUSE
       # share (keep /data on a local disk or the named volume below)

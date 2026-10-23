@@ -153,6 +153,10 @@ class UserSelf(BaseModel):
     # location placed before hamdoor recorded this that it could not attribute
     location_source: LocationSource | None = None
     created_at: datetime
+    # listed in ADMIN_CALLSIGNS: the app shows the Admin section in You
+    is_admin: bool = False
+    # an admin reset the password: the app asks for a new one until it changes
+    must_change_password: bool = False
 
 
 class UserPublic(BaseModel):
@@ -330,3 +334,37 @@ class PostOut(BaseModel):
     updated_at: datetime
     comment_count: int = 0
     comments: list[CommentOut] = []
+
+
+# ---------- admin ----------
+
+
+class AdminUser(BaseModel):
+    """A member as an admin sees them (GET /api/admin/users)."""
+
+    callsign: str
+    name: str
+    email: str
+    city: str
+    state: str
+    created_at: datetime
+    is_admin: bool
+    # how many posts and comments (replies) they have written
+    posts: int
+    comments: int
+    map_precision: MapPrecision
+    must_change_password: bool
+    # the log-in throttles refuse their callsign right now (too many wrong passwords)
+    locked: bool
+
+
+class AdminUserList(BaseModel):
+    users: list[AdminUser]
+    # every member who matches, of which `users` holds the first `limit`
+    total: int
+
+
+class AdminPasswordReset(BaseModel):
+    callsign: str
+    # shown to the admin this once; hamdoor keeps only its bcrypt hash
+    temporary_password: str

@@ -1,8 +1,9 @@
-"""Password hashing, the JWT signing key and JWT helpers."""
+"""Password hashing, the JWT signing key, JWT helpers and who is an admin."""
 
 import hashlib
 import logging
 import os
+import re
 import secrets
 import threading
 from contextlib import contextmanager
@@ -152,6 +153,17 @@ def password_fingerprint(user: User) -> str:
     return hashlib.sha256((user.password_hash or "").encode("utf-8")).hexdigest()[:16]
 
 
+# a temporary password an admin hands to a member (You -> Admin -> Reset
+# password): 12 characters with no 0/O, 1/l/I to misread when it is read out
+# or typed from a note (about 70 bits)
+TEMP_PASSWORD_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+TEMP_PASSWORD_LENGTH = 12
+
+
+def temporary_password() -> str:
+    return "".join(secrets.choice(TEMP_PASSWORD_ALPHABET) for _ in range(TEMP_PASSWORD_LENGTH))
+
+
 # ---------------------------------------------------------------- tokens
 
 
@@ -208,3 +220,29 @@ def _created_ts(user: User) -> float:
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
     return created.timestamp()
+
+
+# ---------------------------------------------------------------- admins
+
+
+def admin_callsigns() -> frozenset[str]:
+    """ADMIN_CALLSIGNS as upper-case callsigns (listed with commas and/or
+    spaces between them). Read on every call, so a changed setting applies
+    from the next request after a restart."""
+    raw = get_settings().admin_callsigns or ""
+    return frozenset(c.upper() for c in re.split(r"[\s,]+", raw) if c)
+
+
+def is_admin(user: User | None) -> bool:
+    """A member is an admin when their callsign is listed in ADMIN_CALLSIGNS
+    (any case): only someone who can change the server's configuration can
+    make one."""
+    return user is not None and bool(user.callsign) and user.callsign.upper() in admin_callsigns()
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """The signed-in member when they are an admin: 401 without a valid token
+    (as every signed-in endpoint), 403 for every other member."""
+    if not is_admin(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins only.")
+    return user

@@ -1,3 +1,4 @@
+import logging
 from typing import get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -17,7 +18,9 @@ from app.schemas import (
     TokenResponse,
     UserSelf,
 )
-from app.security import create_token, hash_password, verify_password
+from app.security import create_token, hash_password, is_admin, verify_password
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -46,6 +49,8 @@ def user_self(user: User) -> UserSelf:
         map_precision="address" if shows_exact_location(user) else "grid",
         location_source=_location_source(user),
         created_at=user.created_at,
+        is_admin=is_admin(user),
+        must_change_password=bool(user.must_change_password),
     )
 
 
@@ -115,6 +120,8 @@ def signup(
     if not shows_exact_location(user) and sync_post_locations(db, user):
         db.commit()  # a new account has no posts; kept so 'grid' is honoured on every path
     db.refresh(user)
+    if is_admin(user):  # the audit trail of who took a listed callsign (see admin.announce_admins)
+        log.info("[admin] %s signed up and is an admin (ADMIN_CALLSIGNS)", user.callsign)
     return TokenResponse(token=create_token(user), user=user_self(user))
 
 
@@ -124,7 +131,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     hour) and every attempt per client address (20 a minute): 429 with
     Retry-After, before any password is checked."""
     call = body.callsign
-    per_call = ((ratelimit.LOGIN_FAILS_SHORT, call), (ratelimit.LOGIN_FAILS_LONG, call))
+    per_call = ratelimit.login_callsign_pairs(call)
     ratelimit.check(*per_call)
     ratelimit.hit((ratelimit.LOGIN_PER_ADDRESS, ratelimit.client_address(request)))
     user = db.scalar(select(User).where(User.callsign == call))
@@ -138,6 +145,5 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
             for t, k in per_call:
                 t.add(k)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect password")
-    for t, k in per_call:
-        t.clear(k)
+    ratelimit.unlock_login(call)
     return TokenResponse(token=create_token(user), user=user_self(user))

@@ -18,7 +18,7 @@ from app.integrations import aprs_feed, uls
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.models import User
 from app.security import signing_key
-from app.routes import activity, aprs, auth, hams, lookup, meta, operators, places, posts, repeaters
+from app.routes import activity, admin, aprs, auth, hams, lookup, meta, operators, places, posts, repeaters
 from app.routes import users as users_route
 from app.scheduler import start_repeaters_scheduler, start_uls_scheduler
 
@@ -71,6 +71,9 @@ async def lifespan(_: FastAPI):
     init_db()
     uls.migrate_hams_table()
     with SessionLocal() as db:
+        # `docker compose logs` shows that ADMIN_CALLSIGNS took effect, and warns about a listed callsign
+        # nobody has signed up with yet
+        admin.announce_admins(db)
         users_route.sync_user_locations(db)  # snap users to street-level geocodes
     _start_once("users-replace", _place_mispinned_members)  # may geocode: off the startup path
     start_uls_scheduler()  # imports FCC ULS data on first run, then weekly
@@ -118,6 +121,7 @@ app.include_router(places.router)
 app.include_router(repeaters.router)
 app.include_router(aprs.router)
 app.include_router(meta.router)
+app.include_router(admin.router)
 
 
 @app.get("/api/health")

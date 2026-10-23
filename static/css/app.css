@@ -122,6 +122,9 @@ button.hd-link { border: 0; padding: 0; background: none; font: inherit; font-we
    to its max-height; fit-content (the UA default it overrode) sizes it to its content and margin:auto centres it */
 @media (min-width: 1024px) { .hd-composer { height: fit-content; } }
 [data-cd-alert]:empty, [data-pw-alert]:empty, [data-del-alert]:empty, [data-profile-alert]:empty, [data-login-alert]:empty { display: none; }
+/* on the narrowest phones a dialog's buttons wrap rather than push the dialog sideways: at 320 px "Cancel" with "Change
+   password", and "Keep my account" with "Delete account", are wider than the dialog, which then cut its text off */
+@media (max-width: 359.98px) { .hd-dialog__actions { flex-wrap: wrap; } }
 .hd-composer .hd-chips { row-gap: var(--hd-sp-3); }
 .hd-composer__bar .hd-btn--primary[aria-busy="true"] { cursor: progress; }
 .hd-field__label--sub { font-size: var(--hd-fs-14); font-weight: var(--hd-w-medium); color: var(--hd-text-2); }
@@ -171,6 +174,63 @@ a.hd-spot:hover { background: var(--hd-fill-subtle); }
 .hd-danger .hd-field__hint { max-width: var(--hd-measure); }
 .hd-pinnow[hidden] { display: none; }
 .hd-form .hd-alert { margin-bottom: var(--hd-sp-2); }
+
+/* After an admin reset: the way to Change password stays at the top of You until it changes (a notice like the
+   log-in page's: 2 px ink edge, its icon, bold text) */
+.hd-banner {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--hd-sp-3); align-items: start;
+  padding: var(--hd-sp-4) var(--hd-sp-5); border: 2px solid var(--hd-ink); border-radius: var(--hd-r-control);
+  background: var(--hd-surface);
+}
+.hd-banner > .hd-icon { margin-top: 1px; color: var(--hd-ink); }
+.hd-banner__text { font-weight: var(--hd-w-bold); max-width: var(--hd-measure); }
+.hd-banner > .hd-btn { grid-column: 2; justify-self: start; margin-top: var(--hd-sp-2); }
+
+/* Admin (You, for the members in ADMIN_CALLSIGNS): the search, then ledger lines like posts, hairlines between
+   members and no card boxes (§7.5); badges are printed tags, the words always there (colour is never alone) */
+.hd-admin { display: grid; gap: var(--hd-sp-4); justify-items: start; }
+.hd-admin > .hd-alert { justify-self: stretch; }
+.hd-admin__count { display: flex; gap: var(--hd-sp-3); align-items: flex-start; color: var(--hd-text-2); font-size: var(--hd-fs-16); }
+.hd-admin__count .hd-icon { flex: none; margin-top: 2px; color: var(--hd-ink); }
+.hd-input[type="search"] { appearance: none; -webkit-appearance: none; }
+.hd-input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+.hd-members { justify-self: stretch; border-top: 1px solid var(--hd-line); }
+.hd-member { display: grid; gap: 2px; padding: var(--hd-sp-5) 0 var(--hd-sp-3); border-bottom: 1px solid var(--hd-line); }
+/* your own line carries the red wash of your row in lists, across the column's gutters */
+.hd-member--you { margin: 0 calc(-1 * var(--hd-gutter)); padding-left: var(--hd-gutter); padding-right: var(--hd-gutter); background: var(--hd-red-12); }
+.hd-member__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--hd-sp-3); min-width: 0; }
+.hd-member__name { min-width: 0; font-weight: var(--hd-w-bold); overflow-wrap: anywhere; }
+.hd-member__meta { color: var(--hd-text-2); font-size: 15px; overflow-wrap: anywhere; }
+.hd-member__tags { display: flex; flex-wrap: wrap; gap: var(--hd-sp-3); margin-top: var(--hd-sp-3); }
+.hd-member__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hd-sp-1); margin: var(--hd-sp-2) 0 0 calc(-1 * var(--hd-sp-4)); }
+.hd-member__actions .hd-btn--quiet { gap: 6px; }
+.hd-member__note { margin-top: var(--hd-sp-3); color: var(--hd-text-2); font-size: 15px; max-width: var(--hd-measure); }
+.hd-tag {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 1px var(--hd-sp-3);
+  border: 1.5px solid var(--hd-ink); border-radius: var(--hd-r-mark); background: var(--hd-surface);
+  color: var(--hd-ink); font-size: var(--hd-fs-14); font-weight: var(--hd-w-bold); line-height: 1.2;
+}
+.hd-tag--you { border-color: var(--hd-member); color: var(--hd-member); }
+.hd-tag--alert { border-color: var(--hd-error); color: var(--hd-error); }
+
+/* the temporary password, shown once: printed large in a ruled box like the QSO box, one tap selects it all. It never
+   wraps: one too wide for the box at this size (all W, M or m) is shrunk to fit by fitPassword() in you.js */
+.hd-temppw { margin-top: var(--hd-sp-5); padding: var(--hd-sp-3) var(--hd-sp-4) var(--hd-sp-4); border: 1px solid var(--hd-rule); border-radius: var(--hd-r-box); }
+.hd-temppw__k { display: block; font-size: var(--hd-fs-14); font-weight: var(--hd-w-medium); color: var(--hd-text-2); }
+.hd-temppw__v {
+  display: block; margin-top: 2px; color: var(--hd-ink);
+  font-size: clamp(var(--hd-fs-25), 8vw, var(--hd-fs-31)); font-weight: var(--hd-w-heavy); line-height: 1.2;
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums slashed-zero; white-space: nowrap;
+  -webkit-user-select: all; user-select: all; cursor: text;
+}
+.hd-temppw__give { margin-top: var(--hd-sp-4); color: var(--hd-text); }
+.hd-temppw__hint { margin-top: var(--hd-sp-3); }
+.hd-temppw__status { margin-top: var(--hd-sp-3); font-size: 15px; font-weight: var(--hd-w-bold); color: var(--hd-ink); }
+.hd-temppw__status:empty { display: none; }
+.hd-temppw__status--error { color: var(--hd-error); }
+[data-dm-alert]:empty { display: none; }
+/* You -> Account for an admin: why there's no Delete account (an admin's account stays while it's listed) */
+.hd-account__note { max-width: var(--hd-measure); }
 
 /* ---------- Sign up and Log in (§7.14) ---------- */
 .hd-auth__notice { display: flex; gap: var(--hd-sp-3); align-items: flex-start; padding: var(--hd-sp-4) var(--hd-sp-5); border: 2px solid var(--hd-ink); border-radius: var(--hd-r-control); font-weight: var(--hd-w-bold); }

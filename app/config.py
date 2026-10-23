@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     trusted_ip_header: str = ""
     # largest request body accepted (bytes); a post is at most 10,000 characters
     max_request_bytes: int = 128 * 1024
+    # members who are admins (You -> Admin: reset passwords, unlock log ins,
+    # delete accounts): callsigns separated by commas and/or spaces, any case,
+    # e.g. "N0CALL, W1XYZ". Blank = no admins. Only someone who can change the
+    # server's configuration can make an admin.
+    admin_callsigns: str = ""
     # HTTP calls to callsign provider / geocoder
     http_timeout_seconds: float = 8.0
     http_user_agent: str = "hamdoor/1.0 (https://github.com/Atvriders/hamdoor)"

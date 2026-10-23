@@ -40,7 +40,8 @@ frequencies in posts that open the matching repeater on the map.
 **Nearby** — registered hams in your range. **Activity** — band conditions,
 repeaters and APRS stations near you, PSK Reporter, WSPR, DX cluster, CW
 Reverse Beacon Network, POTA and SOTA. **You** — your profile, range, map
-privacy, theme and password.
+privacy, theme and password, and for admins the member tools (see
+[Admin](#admin)).
 
 ## How locations work
 
@@ -117,6 +118,53 @@ To build from source instead of pulling the image:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
+## Admin
+
+hamdoor sends no email, so it can't mail anyone a new password. Instead, the
+people who run the server can make some members **admins**, who can reset a
+password, unlock a log in and delete an account.
+
+**Grant it** in `docker-compose.yml`, so only someone who can change the
+server's configuration can make an admin. Sign up with the callsign first:
+sign-up only checks that a callsign is in FCC records, so whoever signs up
+with a listed callsign that has no account yet becomes an admin (the startup
+log warns about such a callsign). Then set
+
+```yaml
+      ADMIN_CALLSIGNS: "N0CALL"          # several: "N0CALL, W1XYZ"
+```
+
+and run `docker compose up -d`. The log shows `[admin] admins
+(ADMIN_CALLSIGNS): N0CALL` at startup. Log in with that callsign, or reload
+the page: **You → Admin** appears at the bottom of the You page
+(`#/you?focus=admin` goes straight to it). To take the rights away, remove the
+callsign and run `docker compose up -d` again.
+
+In **You → Admin** you find a member by callsign or name, and can:
+
+- **Reset password.** hamdoor makes a temporary password and shows it to you
+  once, large, with a Copy button. It is stored only as a hash and never
+  logged, so if it gets lost, reset again. Give it to the member privately
+  (in person, by phone or text). The reset logs them out everywhere. When they
+  log in with the temporary password, hamdoor asks them to choose their own,
+  and keeps asking at each log in until they do.
+- **Unlock log in.** After 5 wrong passwords in 5 minutes (or 20 in an hour) a
+  callsign can't log in for a while, and the list marks it "Locked out". This
+  lets them try again at once. A reset unlocks too.
+- **Delete account.** Their posts, replies and account are removed, as with
+  their own You → Delete account. You type their callsign to confirm. An
+  admin's account, yours included, can't be deleted while its callsign is in
+  `ADMIN_CALLSIGNS`: sign-up only checks FCC records, so whoever signed up with
+  that callsign next would be an admin. Take the callsign out of
+  `ADMIN_CALLSIGNS` and run `docker compose up -d` first. It's then an
+  ordinary account: delete it here, or its owner can with You → Delete
+  account.
+
+Every admin action is logged as one line, e.g. `[admin] N0CALL reset the
+password of W1XYZ` (`docker compose logs hamdoor | grep "\[admin\]"`). The
+admin API also returns each member's email address, so an admin can reach
+them about their account.
+
 ## Development (no Docker)
 
 ```bash
@@ -156,7 +204,7 @@ groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
 | --- | --- |
 | `POST /api/auth/signup`, `POST /api/auth/login` | create an account (callsign checked against FCC data) / log in → token |
 | `GET /api/lookup/{callsign}` | sign-up autofill |
-| `GET, PATCH, DELETE /api/me` | your profile (range 5–500 mi, `map_precision` `address` or `grid`); delete your account (needs your password) |
+| `GET, PATCH, DELETE /api/me` | your profile (range 5–500 mi, `map_precision` `address` or `grid`); delete your account (needs your password; not while you're an admin) |
 | `POST /api/me/password`, `POST /api/me/refresh-callsign` | change password; re-sync from FCC data |
 | `GET /api/operators/nearby` | registered hams in range |
 | `GET /api/posts/feed?category=&author=&page=` | posts within your range |
@@ -170,6 +218,7 @@ groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
 | `GET /api/aprs/map`, `/station?key=`, `/search?q=`, `/status`, `/lookup/{callsign}` | live APRS stations in view (window, categories, tracks), one station, search, feed status, aprs.fi lookup (when a key is set) |
 | `GET /api/activity/{bands,pskreporter,wspr,dxcluster,rbn,aprs,pota,sota}` | activity toolbox; **502** means the upstream service didn't answer |
 | `GET /api/config` | basemaps and feature switches for the browser |
+| `GET /api/admin/users?q=&limit=`, `POST /api/admin/users/{callsign}/reset-password`, `POST /api/admin/users/{callsign}/unlock`, `DELETE /api/admin/users/{callsign}` | admins only (`ADMIN_CALLSIGNS`, see [Admin](#admin)): find members; reset a password (answers with a one-time temporary password); unlock a log in; delete an account (not an admin's) |
 
 ## Privacy model
 
@@ -181,10 +230,13 @@ groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
   you as a member. (Your FCC record itself is public, and the sign-up and log-in
   forms can still tell someone whether a callsign has an account.)
 - Posts are visible to members within range of where they were posted.
-- Your **street address and email** are never shown to anyone as text, in any
-  response.
+- Your **street address** is never shown to anyone as text, in any response,
+  and your **email** only to you and to this server's admins (so they can
+  reach you about your account).
 - Delete your account any time (You → Delete account): your posts, replies and
-  account are removed; your FCC licence stays in the public directory.
+  account are removed; your FCC licence stays in the public directory. An
+  admin's account waits until its callsign is out of `ADMIN_CALLSIGNS` (see
+  [Admin](#admin)).
 - Activity data is public RF information (spots, beacons, positions).
 
 ## Troubleshooting
@@ -199,10 +251,13 @@ groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
   upgrade note above.
 - **"Too many attempts. Try again in a minute."** — the log-in, sign-up and
   lookup limits. Behind a proxy, set `TRUSTED_IP_HEADER` (see above) so one
-  visitor can't use up everyone's allowance.
-- **Forgotten password** — there's no email reset yet; an admin can delete the
-  account row (`DELETE FROM users WHERE callsign='…'` in `/data/hamdoor.db`) so
-  the person can sign up again.
+  visitor can't use up everyone's allowance. A member locked out by wrong
+  passwords can be let back in at once by an admin (You → Admin → Unlock log
+  in).
+- **Forgotten password** — there's no email reset; an admin resets it (see
+  [Admin](#admin)): You → Admin, find the member, Reset password, and give
+  them the temporary password. No admin yet? Put your own callsign (signed up
+  already) in `ADMIN_CALLSIGNS` and run `docker compose up -d`.
 - **No APRS traffic** — check `/api/aprs/status`: `connected`, `server` and
   `last_error`. Some APRS-IS servers refuse generic logins; set `APRS_LOGIN` to
   your callsign plus an SSID.

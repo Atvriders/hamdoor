@@ -37,6 +37,11 @@ class User(Base):
     # 'geocoded' (Nominatim), 'zip' (ZIP anchor); NULL = no location, or a
     # point placed before this column existed that could not be attributed
     location_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 1 after an admin reset the password (the member is asked for a new one at
+    # every log in until they change it); 0 again once they do. Existing
+    # databases get the column from a startup migration.
+    must_change_password: Mapped[int] = mapped_column(Integer, nullable=False, default=0,
+                                                      server_default=text("0"))
 
     posts: Mapped[list["Post"]] = relationship(back_populates="author")
     comments: Mapped[list["Comment"]] = relationship(back_populates="author")

@@ -114,7 +114,7 @@
   const plainField = (id, name, label, auto, extra = "") =>
     `<div class="hd-field"><label class="hd-field__label" for="${id}">${label}</label><input class="hd-input" id="${id}" name="${name}" autocomplete="${auto}"${extra}></div>`;
   const emailField = (value) =>
-    `<div class="hd-field"><label class="hd-field__label" for="su-email">Email</label><input class="hd-input" id="su-email" name="email" type="email" autocomplete="email" value="${esc(value)}" aria-describedby="su-email-h"><p class="hd-field__hint" id="su-email-h">Only you see your email.</p></div>`;
+    `<div class="hd-field"><label class="hd-field__label" for="su-email">Email</label><input class="hd-input" id="su-email" name="email" type="email" autocomplete="email" value="${esc(value)}" aria-describedby="su-email-h"><p class="hd-field__hint" id="su-email-h">Only you and this server's admins see your email.</p></div>`;
   const passwordField = () =>
     `<div class="hd-field"><label class="hd-field__label" for="su-pw">Password</label><input class="hd-input" id="su-pw" name="password" type="password" autocomplete="new-password" aria-describedby="su-pw-h"><p class="hd-field__hint" id="su-pw-h">At least 8 characters</p></div>`;
 

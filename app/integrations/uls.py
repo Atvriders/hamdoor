@@ -311,11 +311,12 @@ def fill_iso_dates(conn=None):
 
 
 def migrate_users_table(bind=None):
-    """Add users.map_precision and users.location_source to databases
-    created before they existed (create_all only adds missing tables).
-    Idempotent; every existing member keeps the default 'address' (where
-    they are shown today), and gets a best-effort location_source once, when
-    the column is added (guess_location_sources)."""
+    """Add users.map_precision, users.location_source and
+    users.must_change_password to databases created before they existed
+    (create_all only adds missing tables). Idempotent; every existing member
+    keeps the default 'address' (where they are shown today), gets a
+    best-effort location_source once, when the column is added
+    (guess_location_sources), and is not asked to change their password."""
     with (bind or engine).begin() as conn:
         cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)"))]
         if cols and "map_precision" not in cols:
@@ -327,6 +328,10 @@ def migrate_users_table(bind=None):
             conn.execute(text("ALTER TABLE users ADD COLUMN location_source TEXT"))
             n = guess_location_sources(conn)
             log.info("[users] location_source guessed for %d existing member(s)", n)
+        if cols and "must_change_password" not in cols:
+            log.info("[users] migrating users table: adding 'must_change_password' column")
+            conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL"
+                              " DEFAULT 0"))
 
 
 # a stored point "equals" a source's point within this many degrees (~1 cm):

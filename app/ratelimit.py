@@ -130,3 +130,24 @@ def hit(*pairs: tuple[Throttle, str]) -> None:
 def reset_all() -> None:
     for t in ALL:
         t.reset()
+
+
+# ---------------------------------------------------------------- one callsign's log in
+
+
+def login_callsign_pairs(callsign: str) -> tuple[tuple[Throttle, str], ...]:
+    """The (throttle, key) pairs that count wrong passwords for a callsign."""
+    return ((LOGIN_FAILS_SHORT, callsign), (LOGIN_FAILS_LONG, callsign))
+
+
+def login_locked(callsign: str) -> bool:
+    """Is log in refused for this callsign right now (too many wrong
+    passwords)? Never while the throttles are switched off."""
+    return enabled() and any(t.retry_after(k) for t, k in login_callsign_pairs(callsign))
+
+
+def unlock_login(callsign: str) -> None:
+    """Forget the wrong passwords counted against a callsign (an admin's
+    Unlock log in and password reset), so it can log in again at once."""
+    for t, k in login_callsign_pairs(callsign):
+        t.clear(k)

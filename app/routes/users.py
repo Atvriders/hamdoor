@@ -8,7 +8,7 @@ from app.integrations.provider import CallsignProvider, get_provider
 from app.models import Comment, Post, User
 from app.routes.auth import user_self
 from app.schemas import AccountDelete, PasswordChange, TokenResponse, UserSelf, UserUpdate
-from app.security import create_token, get_current_user, hash_password, verify_password
+from app.security import create_token, get_current_user, hash_password, is_admin, verify_password
 
 router = APIRouter(prefix="/api/me", tags=["users"])
 
@@ -47,13 +47,26 @@ def update_me(body: UserUpdate, user: User = Depends(get_current_user), db: Sess
     return user_self(user)
 
 
-@router.delete("", status_code=204)
-def delete_me(body: AccountDelete, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Delete the account: the member's comments, their posts (with every
-    comment on them) and the member. Their FCC directory entry is public
-    record and stays. Needs the current password."""
-    if not verify_password(body.password, user.password_hash):
-        raise HTTPException(400, "password is incorrect")
+def refuse_if_admin(user: User) -> None:
+    """400 for an admin's account (a callsign listed in ADMIN_CALLSIGNS):
+    it can't be deleted while the callsign is listed. Sign up checks only
+    that a callsign is in FCC records, so with the account gone the next
+    person to sign up with that callsign would be an admin at once, with no
+    server access. Taking the callsign out of ADMIN_CALLSIGNS (and
+    restarting) makes it an ordinary account that can be deleted."""
+    if is_admin(user):
+        raise HTTPException(400, f"An admin's account can't be deleted. Take {user.callsign} out of "
+                                 "ADMIN_CALLSIGNS and restart hamdoor first.")
+
+
+def delete_account(db: Session, user: User) -> None:
+    """Delete a member: their comments, their posts (with every comment on
+    them) and the account. Their FCC directory entry is public record and
+    stays. Shared by DELETE /api/me and an admin's DELETE
+    /api/admin/users/{callsign}; their tokens stop working with the row.
+    Every account deletion comes through here, so an admin's account is
+    refused on every path (refuse_if_admin)."""
+    refuse_if_admin(user)
     uid = user.id
     own_posts = select(Post.id).where(Post.author_id == uid)
     db.execute(delete(Comment).where(or_(Comment.author_id == uid, Comment.post_id.in_(own_posts)))
@@ -62,6 +75,19 @@ def delete_me(body: AccountDelete, user: User = Depends(get_current_user), db: S
     db.execute(delete(User).where(User.id == uid).execution_options(synchronize_session=False))
     db.commit()
     db.expunge(user)
+
+
+@router.delete("", status_code=204)
+def delete_me(body: AccountDelete, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete the account: the member's comments, their posts (with every
+    comment on them) and the member. Their FCC directory entry is public
+    record and stays. Needs the current password. An admin's account is
+    refused (400, see refuse_if_admin) before the password is checked, so
+    the answer can't be mistaken for a wrong password."""
+    refuse_if_admin(user)
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(400, "password is incorrect")
+    delete_account(db, user)
     return Response(status_code=204)
 
 
@@ -73,10 +99,16 @@ def change_password(
 ):
     """Every token carries a fingerprint of the password it was issued
     under, so changing it ends every other session (a stolen token stops
-    working); the session that made the change gets a fresh token here."""
+    working); the session that made the change gets a fresh token here.
+    After an admin reset (must_change_password) the new password has to
+    differ from the temporary one, which the admin knows; the change clears
+    the flag."""
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(400, "current password is incorrect")
+    if user.must_change_password and body.new_password == body.current_password:
+        raise HTTPException(400, "the new password must be different from the temporary password")
     user.password_hash = hash_password(body.new_password)
+    user.must_change_password = 0
     db.commit()
     db.refresh(user)
     return TokenResponse(token=create_token(user), user=user_self(user))
