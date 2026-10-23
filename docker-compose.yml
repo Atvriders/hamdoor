@@ -2,9 +2,11 @@
 #
 #   docker compose up -d        → http://localhost:3033
 #
-# Everything is configured right here. The ONLY thing you must change before
-# exposing this to the internet is SECRET_KEY below (any long random string,
-# e.g. `python3 -c "import secrets; print(secrets.token_hex(32))"`).
+# Everything is configured right here. SECRET_KEY signs every login: leave it
+# blank and hamdoor generates a random key once and keeps it in
+# /data/secret_key, or set your own long random string (32+ characters, e.g.
+# `python3 -c "import secrets; print(secrets.token_hex(32))"`). A published
+# placeholder or a short key is never used.
 
 services:
   hamdoor:
@@ -14,9 +16,16 @@ services:
     ports:
       - "3033:8000"
     environment:
-      # --- REQUIRED: change this to a long random string ---
-      SECRET_KEY: "change-me-to-a-long-random-string"
+      # --- logins: blank = a random key kept in /data/secret_key ---
+      SECRET_KEY: ""
       DATABASE_URL: "sqlite:////data/hamdoor.db"
+      # SQLite write-ahead log; set "false" only if /data is a network or FUSE
+      # share (keep /data on a local disk or the named volume below)
+      SQLITE_WAL: "true"
+      # Behind Cloudflare (tunnel or proxy) set this to "CF-Connecting-IP" so
+      # the log-in/sign-up limits count each visitor, not the proxy. Leave it
+      # blank if the server can also be reached directly (the header is forgeable).
+      TRUSTED_IP_HEADER: ""
 
       # --- activity toolbox sources ---
       PSKREPORTER_URL: "https://pskreporter.info/query"
@@ -24,7 +33,7 @@ services:
       POTA_URL: "https://api.pota.app/spot/activator"
       SOTA_URL: "https://api2.sota.org.uk/api/spots/-2/h/all"
       HAMQSL_URL: "https://www.hamqsl.com/solarxml.php"
-      APRS_HOST: "rotate.aprs2.net"
+      APRS_HOST: "noam.aprs2.net"               # APRS-IS regional pool (North America)
       APRS_PORT: "14580"
       DXC_HOST: "ve7cc.net"                     # DX cluster telnet node
       DXC_PORT: "23"
@@ -42,6 +51,7 @@ services:
       ULS_CHECK_INTERVAL_HOURS: "24"
       NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
       HAMS_MAP_MAX_RESULTS: "10000"             # max individual pins per map viewport
+                                                # (denser views get fine clusters)
 
       # --- street-level geocoding (Census batch API, free, no key) ---
       # A weekly CI job pre-geocodes everything and publishes it; the container
@@ -52,6 +62,40 @@ services:
       CENSUS_BATCH_SIZE: "9000"
       CENSUS_TIMEOUT_SECONDS: "300"
       GEOCODE_BACKFILL_THRESHOLD: "500"         # backfill when more missing than this
+      GEOCODE_MISS_RETRY_DAYS: "30"             # addresses Census can't match: retry monthly
+
+      # --- live APRS traffic on the map (one receive-only APRS-IS connection) ---
+      # Logs in with "pass -1" (receive only) — never with anyone's passcode.
+      # Set APRS_LOGIN to YOUR callsign plus an app SSID (9 characters max,
+      # e.g. N0CALL-HD); blank = an auto-generated HAMDOOR-x login.
+      # Run a single uvicorn worker: the feed and its station store live in-process.
+      APRS_FEED_ENABLED: "true"
+      APRS_LOGIN: ""
+      APRS_FEED_FILTER: "a/72/-180/17/-64"      # North America box (~30 packets/s)
+      APRS_RETENTION_HOURS: "6"                 # history kept in memory (~65 MB for NA)
+      APRS_TRACK_MAX_POINTS: "120"
+      APRS_MAP_MAX_RESULTS: "3000"
+      APRS_SNAPSHOT_ENABLED: "true"             # survive restarts (/data/aprs_snapshot.json.gz)
+      APRSFI_API_KEY: ""                        # optional: on-demand aprs.fi callsign lookup
+                                                # (use your own key; see aprs.fi API terms)
+
+      # --- amateur repeaters (fetched live by each installation; nothing redistributed) ---
+      REPEATERS_ENABLED: "true"
+      HEARHAM_URL: "https://hearham.com/api/repeaters/v1"
+      BRANDMEISTER_URL: "https://api.brandmeister.network/v2/device?repeater=true"
+      IRLP_URL: "https://status.irlp.net/nohtmlstatus.txt.bz2"
+      GEONAMES_CITIES_URL: "https://download.geonames.org/export/dump/cities500.zip"
+      REPEATERS_REFRESH_DAYS: "7"               # HearHam (plus a random 0-6 h jitter)
+      BRANDMEISTER_REFRESH_HOURS: "24"
+      IRLP_REFRESH_HOURS: "12"
+      REPEATERS_MAP_MAX_RESULTS: "2000"
+
+      # --- map basemaps (keyless; change if a provider goes away) ---
+      MAP_STREETS_STYLE_URL: "https://tiles.openfreemap.org/styles/liberty"
+      MAP_DARK_STYLE_URL: "https://tiles.openfreemap.org/styles/dark"
+      MAP_OSM_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      MAP_SATELLITE_URL: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      MAP_TOPO_URL: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}"
     volumes:
       - hamdoor_data:/data
     restart: unless-stopped

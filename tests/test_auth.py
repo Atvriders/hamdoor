@@ -97,3 +97,53 @@ def test_health_reports_user_count(client):
 
 def test_protected_route_requires_token(client):
     assert client.get("/api/me").status_code == 401
+
+
+# ---------------------------------------------------------------- map precision
+
+
+def test_map_precision_defaults_to_address_and_is_validated(client):
+    """Members are shown at their stored location unless they choose
+    'grid'; the setting is part of the profile, accepted only as 'address'
+    or 'grid', and changing it never moves the stored location."""
+    _delete_user("W1DDD")  # other modules sign W1DDD up first; start from a fresh account
+    data = signup(client, "W1DDD")
+    tok, user = data["token"], data["user"]
+    assert user["map_precision"] == "address"
+    r = client.patch("/api/me", headers=auth(tok), json={"map_precision": "grid"})
+    assert r.status_code == 200, r.text
+    assert r.json()["map_precision"] == "grid"
+    assert (r.json()["lat"], r.json()["lon"]) == (user["lat"], user["lon"])
+    assert client.get("/api/me", headers=auth(tok)).json()["map_precision"] == "grid"
+    login = client.post("/api/auth/login", json={"callsign": "W1DDD", "password": "password123"})
+    assert login.json()["user"]["map_precision"] == "grid"
+    for bad in ("GRID", "exact", "", " grid", None, 1, ["grid"]):
+        r = client.patch("/api/me", headers=auth(tok), json={"map_precision": bad})
+        assert r.status_code == 422, (bad, r.text)
+    r = client.patch("/api/me", headers=auth(tok), json={"range_miles": 30})  # omitted: unchanged
+    assert r.json()["map_precision"] == "grid"
+    r = client.patch("/api/me", headers=auth(tok), json={"map_precision": "address"})
+    assert r.json()["map_precision"] == "address"
+
+
+def test_signup_accepts_map_precision(client):
+    for bad in ("street", "", None):
+        r = client.post("/api/auth/signup", json={"callsign": "W9CCC", "password": "password123",
+                                                  "email": "w9ccc@example.com", "map_precision": bad})
+        assert r.status_code == 422, (bad, r.text)
+    _delete_user("W9CCC")  # an earlier test may have signed W9CCC up: start over
+    r = client.post("/api/auth/signup", json={"callsign": "W9CCC", "password": "password123",
+                                              "email": "w9ccc@example.com", "map_precision": "grid"})
+    assert r.status_code == 201, r.text
+    assert r.json()["user"]["map_precision"] == "grid"
+    # leave no grid-precision W9CCC behind: later modules expect a default account
+    _delete_user("W9CCC")
+
+
+def _delete_user(callsign):
+    from app.db import SessionLocal
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.query(User).filter_by(callsign=callsign).delete()
+        db.commit()

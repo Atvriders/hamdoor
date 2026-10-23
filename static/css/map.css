@@ -1,0 +1,124 @@
+/* =====================================================================
+   hamdoor map: the few rules the map needs beyond components.css (C.17 to C.22,
+   C.28 to C.30), which it uses but never edits. Tokens only from tokens.css.
+   DESIGN_SYSTEM.md §3, §6, §7.10, §9.2.
+   ===================================================================== */
+
+/* the label canvas sits in the hd-labels pane, under the DOM marks, above the dots */
+.hd-labelcanvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+.hd-map .hd-selring { background: none; border: 0; pointer-events: none; }
+
+/* §7.10 hit areas: the wrappers that position floating chrome take no pointer (a tap in the gap between
+   the zoom stack and locate, or beside the Layers button, is a map tap); only the controls do. Tucked
+   chrome still takes none (C.22 wins on specificity). */
+.hd-mapbar, .hd-maptools, .hd-mapside { pointer-events: none; }
+.hd-mapbar > *, .hd-maptools > *, .hd-mapside > * { pointer-events: auto; }
+
+/* Zoom and locate never move for a toast (§6.1: a tap on "+" must never land on "−"). On the map the shell's toasts
+   keep out of their column instead: on phones they end left of it; on desktop they end left of it, or sit over an
+   open detail panel (whose bottom-left corner the column hugs). Short phones keep the column at the top, clear of them. */
+@media (max-width: 1023.98px) and (min-height: 500px) {
+  .hd-app[data-route="map"] .hd-toasts { right: calc(var(--hd-safe-right) + var(--hd-gutter) + var(--hd-map-btn) + var(--hd-sp-3)); }
+}
+@media (min-width: 1024px) {
+  .hd-app[data-route="map"] .hd-toasts { right: calc(var(--hd-sp-5) + var(--hd-map-btn) + var(--hd-sp-4)); }
+  .hd-app[data-route="map"][data-detail="open"] .hd-toasts { right: calc(var(--hd-sp-5) + var(--hd-sp-3)); max-width: calc(var(--hd-detail-w) - 2 * var(--hd-sp-3)); }
+}
+/* while the zoom hint shows, the toasts stack above it (map-ui.js measures --hd-hint-clear), so a toast never covers
+   it either; not while the on-screen keyboard is up, when the toasts ride on the keyboard (C.14) */
+:root:not(.hd-keyboard-up) .hd-app[data-route="map"][data-hint="up"] .hd-toasts { bottom: max(calc(var(--hd-tab-h) + var(--hd-safe-bottom) + var(--hd-sp-4)), var(--hd-hint-clear, 0px)); }
+@media (min-width: 1024px) {
+  :root:not(.hd-keyboard-up) .hd-app[data-route="map"][data-hint="up"] .hd-toasts { bottom: max(var(--hd-sp-7), var(--hd-hint-clear, 0px)); }
+}
+.hd-mapfoot { transition: bottom var(--hd-dur-sheet) var(--hd-ease-out); }
+@media (prefers-reduced-motion: reduce) { .hd-mapfoot { transition: none; } } /* the side stack: C.22 already keeps only its fade */
+
+/* Phones: zoom and locate sit 52 px above the tab bar or an open sheet, which clears a two-line attribution (C.19);
+   a narrow phone wraps it to three lines, so they clear its measured height when that is more. When a half sheet
+   leaves no room for them under the Layers button (a shorter phone), they step away, as they do behind a full sheet,
+   instead of sitting on top of Layers (map-ui.js sets data-mapside). */
+@media (max-width: 1023.98px) and (min-height: 500px) {
+  .hd-app[data-route="map"] .hd-mapside { bottom: calc(var(--hd-map-bottom, calc(var(--hd-tab-h) + var(--hd-safe-bottom))) + max(52px, calc(var(--hd-attr-h, 40px) + var(--hd-sp-3)))); }
+}
+.hd-app[data-mapside="none"] .hd-mapside { visibility: hidden; pointer-events: none; }
+
+/* The zoom hint stays in the map you can see (§7.10): clear of the attribution (one to three lines, measured into
+   --hd-attr-h), of zoom and locate, and of open panels: never under one. */
+@media (max-width: 1023.98px) and (min-height: 500px) {
+  .hd-zoomhint__wrap { margin-bottom: max(48px, calc(var(--hd-attr-h, 40px) + var(--hd-sp-3))); }
+}
+@media (max-width: 1023.98px) and (max-height: 499.98px) {
+  .hd-zoomhint__wrap { margin-bottom: calc(var(--hd-attr-h, 22px) + var(--hd-sp-3)); }
+  /* beside a side panel: left of it (the attribution moves there too and wraps, so the hint sits above it) */
+  .hd-app:is([data-detail="open"], [data-layers="open"]) .hd-mapfoot { right: calc(var(--hd-safe-right) + var(--hd-spanel-w) + var(--hd-sp-3)); }
+  .hd-app:is([data-detail="open"], [data-layers="open"]) .hd-zoomhint__wrap { padding-right: var(--hd-sp-3); }
+}
+@media (min-width: 1024px) {
+  /* between the scale bar (at most 110 px, bottom left of the free map) and zoom and locate, between the panels */
+  .hd-mapfoot { left: calc(var(--hd-rail-w) + var(--hd-sp-5) + 110px + var(--hd-sp-4)); right: calc(var(--hd-sp-5) + var(--hd-map-btn) + var(--hd-sp-4)); }
+  .hd-app[data-layers="open"] .hd-mapfoot { left: calc(var(--hd-rail-w) + var(--hd-panel-w) + var(--hd-sp-5) * 2 + 110px + var(--hd-sp-4)); }
+  .hd-app[data-detail="open"] .hd-mapfoot { right: calc(var(--hd-detail-w) + var(--hd-sp-5) * 2 + var(--hd-map-btn) + var(--hd-sp-4)); }
+  .hd-zoomhint__wrap { padding-left: 0; padding-right: 0; }
+  .hd-zoomhint { max-width: 100%; }
+}
+
+/* search results float above an open desktop layers panel (they belong to the pill) */
+.hd-mapbar[data-results="open"] { z-index: calc(var(--hd-z-sheet) + 1); }
+
+/* phones and short phones: the live chip shows only while stale or failing, in the scale bar's slot,
+   at most 100vw minus the gutters, the Layers button and 8 px; its text truncates (§7.10) */
+.hd-mapstatus {
+  --hd-ah-lift: calc(var(--hd-safe-top) + var(--hd-sp-3) + var(--hd-search-h) + var(--hd-sp-3));
+  position: fixed; z-index: var(--hd-z-map-ui);
+  top: calc(var(--hd-safe-top) + var(--hd-sp-3) + var(--hd-search-h) + var(--hd-sp-3));
+  left: calc(var(--hd-safe-left) + var(--hd-gutter));
+  max-width: calc(100vw - 2 * var(--hd-gutter) - 112px - var(--hd-sp-3) - var(--hd-safe-left) - var(--hd-safe-right));
+  pointer-events: none;
+}
+.hd-mapstatus .hd-status { max-width: 100%; min-height: 40px; }
+.hd-mapstatus__text { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1023.98px) {
+  .hd-app[data-live="stale"] .hd-mapscale, .hd-app[data-live="error"] .hd-mapscale { visibility: hidden; }
+}
+@media (max-width: 1023.98px) and (max-height: 499.98px) {
+  .hd-mapstatus { left: calc(var(--hd-srail-w) + var(--hd-safe-left) + var(--hd-gutter)); }
+  /* the attribution stays right of the rail and wraps there, never under it */
+  .hd-map .leaflet-bottom.leaflet-right { left: calc(var(--hd-srail-w) + var(--hd-safe-left)); }
+}
+@media (min-width: 1024px) { .hd-mapstatus { display: none; } }
+
+/* a sign assembly sizes to its tags, never to its 18 or 22 px icon box: in a compact row (below z12) the first
+   tag (overflow hidden, so its min-width is 0) used to shrink to a sliver beside "+19", leaving only its dashed
+   outline. Same bug in the design's own shots (phone-map-z10 "+21"). */
+.hd-mk-rpt { width: max-content; }
+.hd-mk-rpt > * { flex: none; }
+
+/* a selected post or activator moves its label clear of the selection ring (30 px plus its bands reach 22 px from the
+   mark's centre), as a selected APRS pill moves out (§3.4, §3.6); flipped labels move out on the left */
+.hd-mk-post.is-selected .hd-lbl { left: calc(100% + 10px); }
+.hd-flip .hd-mk-post.is-selected .hd-lbl { left: auto; right: calc(100% + 10px); }
+.hd-mk-spot.is-selected .hd-pill { left: 34px; }
+.hd-flip .hd-mk-spot.is-selected .hd-pill { left: auto; right: 34px; }
+
+/* the selected machine in a sign assembly carries the selection ring (§3.6) */
+.hd-mk-rpt__tag.is-selected { box-shadow: 0 0 0 2px var(--ov-ring), 0 0 0 4.5px var(--ov-ink); }
+
+/* APRS: an emergency beacon's pill is the one red thing that is not a person, and it always
+   carries the words "Emergency beacon" in its card (§3.4). Same red and count ink as a merged
+   neighbour disc, so it reads on every basemap tone. */
+.hd-pill--emergency { background: var(--cluster-member); color: var(--cluster-member-ink); border-color: transparent; }
+/* ambiguous positions: a dashed box the size of the ambiguity under the sprite, from z11 */
+.hd-mk-aprs__amb {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  border: 1.5px dashed var(--ov-ink); border-radius: 2px; pointer-events: none;
+}
+
+/* the layers sheet's title takes focus when Layers opens from the keyboard, only so screen readers announce it:
+   no ring, like the card headings (components.css C.27) */
+.hd-sheet__title:focus { outline: none; box-shadow: none; }
+
+/* card parts the station cards add */
+.hd-detail__lede--alert { display: flex; align-items: center; gap: var(--hd-sp-3); color: var(--hd-error); font-weight: var(--hd-w-heavy); }
+.hd-rptlinks { display: grid; gap: var(--hd-sp-2); font-size: var(--hd-fs-16); }
+.hd-rptnotes { white-space: pre-line; overflow-wrap: anywhere; max-width: var(--hd-measure); }
+.hd-detail__head .hd-mk-you, .hd-row__lead .hd-mk-you { flex: none; }

@@ -2,8 +2,10 @@ from contextlib import asynccontextmanager
 from hashlib import sha1
 from pathlib import Path
 import logging
+import re
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
@@ -11,23 +13,26 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal, get_db, init_db
-from app.integrations import uls
+from app.integrations import aprs_feed, uls
+from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.models import User
-from app.routes import activity, auth, hams, lookup, operators, posts
+from app.security import signing_key
+from app.routes import activity, aprs, auth, hams, lookup, meta, operators, places, posts, repeaters
 from app.routes import users as users_route
-from app.scheduler import start_uls_scheduler
+from app.scheduler import start_repeaters_scheduler, start_uls_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def _static_version() -> str:
-    """Short content hash of the static assets. Every new image build changes
-    it, so index.html references /static/app.js?v=<hash> and CDN/browser
+    """Short content hash of every static asset. Every new image build changes
+    it, so index.html references /static/...js?v=<hash> and CDN/browser
     caches can never serve a stale frontend after a deploy."""
     h = sha1()
-    for p in sorted(STATIC_DIR.glob("*.*")):
-        h.update(p.name.encode())
-        h.update(p.read_bytes())
+    for p in sorted(STATIC_DIR.rglob("*")):
+        if p.is_file():
+            h.update(p.relative_to(STATIC_DIR).as_posix().encode())
+            h.update(p.read_bytes())
     return h.hexdigest()[:10]
 
 
@@ -44,17 +49,44 @@ _app_log.setLevel(logging.INFO)
 _app_log.propagate = False
 
 
+def _place_mispinned_members():
+    from app.integrations.geocode import place_mispinned_members
+
+    with SessionLocal() as db:
+        place_mispinned_members(db)
+
+
+def _start_once(name: str, fn) -> None:
+    import threading
+
+    threading.Thread(target=fn, daemon=True, name=name).start()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # a published placeholder SECRET_KEY is replaced by a random key kept in
+    # the data dir; refuses to start when that can't be done
+    signing_key()
     init_db()
     uls.migrate_hams_table()
     with SessionLocal() as db:
         users_route.sync_user_locations(db)  # snap users to street-level geocodes
+    _start_once("users-replace", _place_mispinned_members)  # may geocode: off the startup path
     start_uls_scheduler()  # imports FCC ULS data on first run, then weekly
+    start_repeaters_scheduler()  # HearHam weekly, BrandMeister daily, IRLP twice a day
+    aprs_feed.start()  # live APRS-IS consumer (receive-only)
     yield
+    aprs_feed.stop()
 
 
-app = FastAPI(title="hamdoor", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
+# no Swagger/ReDoc pages: they load unpinned CDN scripts into hamdoor's origin,
+# where the session token lives (the OpenAPI schema itself stays available)
+app = FastAPI(title="hamdoor", version="1.0.0", docs_url=None, redoc_url=None,
+              openapi_url="/api/openapi.json", lifespan=lifespan)
+# map payloads run to ~1.5 MB for a dense view; gzip shrinks them ~8x
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth.router)
 app.include_router(lookup.router)
@@ -63,6 +95,10 @@ app.include_router(operators.router)
 app.include_router(posts.router)
 app.include_router(activity.router)
 app.include_router(hams.router)
+app.include_router(places.router)
+app.include_router(repeaters.router)
+app.include_router(aprs.router)
+app.include_router(meta.router)
 
 
 @app.get("/api/health")
@@ -90,9 +126,12 @@ async def cache_headers(request: Request, call_next):
 def index():
     # no-cache: this is what points browsers at the current versioned assets
     html = (STATIC_DIR / "index.html").read_text()
-    html = html.replace("/static/app.js", f"/static/app.js?v={STATIC_VERSION}")
-    html = html.replace("/static/style.css", f"/static/style.css?v={STATIC_VERSION}")
+    html = _ASSET_REF.sub(lambda m: f"{m.group(1)}?v={STATIC_VERSION}", html)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+
+# every local script/stylesheet reference in index.html gets the version query
+_ASSET_REF = re.compile(r"""(/static/[^"'?#\s]+\.(?:js|css))(?=["'])""")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import get_args
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import ratelimit
 from app.db import get_db
-from app.integrations.geocode import resolve_user_location
+from app.integrations.geocode import (resolve_user_location_source, shows_exact_location,
+                                     sync_post_locations)
 from app.integrations.provider import CallsignProvider, CallsignRecord, get_provider
 from app.models import Ham, User
 from app.schemas import (
+    LocationSource,
     LoginRequest,
     SignupRequest,
     TokenResponse,
@@ -15,6 +20,14 @@ from app.schemas import (
 from app.security import create_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _location_source(user: User) -> str | None:
+    """users.location_source when the user has a location and the value is
+    one the API defines (a hand-edited row must not turn /api/me into a 500)."""
+    if user.lat is None or user.lon is None:
+        return None
+    return user.location_source if user.location_source in get_args(LocationSource) else None
 
 
 def user_self(user: User) -> UserSelf:
@@ -30,6 +43,8 @@ def user_self(user: User) -> UserSelf:
         lat=user.lat,
         lon=user.lon,
         range_miles=user.range_miles,
+        map_precision="address" if shows_exact_location(user) else "grid",
+        location_source=_location_source(user),
         created_at=user.created_at,
     )
 
@@ -37,9 +52,13 @@ def user_self(user: User) -> UserSelf:
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     body: SignupRequest,
+    request: Request,
     db: Session = Depends(get_db),
     provider: CallsignProvider = Depends(get_provider),
 ):
+    # every attempt counts (a taken callsign too): each one hashes a password
+    # and asks the callsign provider and the geocoder
+    ratelimit.hit((ratelimit.SIGNUP_PER_ADDRESS, ratelimit.client_address(request)))
     if db.scalar(select(User).where(User.callsign == body.callsign)):
         raise HTTPException(status.HTTP_409_CONFLICT, "that callsign is already registered")
 
@@ -70,9 +89,10 @@ def signup(
     zip_ = body.zip.strip() or record.zip
     grid = body.grid.strip() or record.grid
 
-    latlon = resolve_user_location(db, body.callsign, grid, address_line, city, state, zip_)
-    if latlon is None and ham is not None and ham.lat is not None:
-        latlon = (ham.lat, ham.lon)  # ZIP centroid from the ULS import
+    # street pin (same address only) -> provider coordinates -> grid ->
+    # Nominatim -> ZIP anchor; see resolve_user_location_source
+    placed = resolve_user_location_source(db, body.callsign, grid, address_line, city, state, zip_,
+                                          record=record)
 
     user = User(
         callsign=body.callsign,
@@ -84,24 +104,40 @@ def signup(
         state=state,
         zip=zip_,
         grid=grid,
-        lat=latlon[0] if latlon else None,
-        lon=latlon[1] if latlon else None,
+        lat=placed[0] if placed else None,
+        lon=placed[1] if placed else None,
+        location_source=placed[2] if placed else None,
         range_miles=25,
+        map_precision=body.map_precision,
     )
     db.add(user)
     db.commit()
+    if not shows_exact_location(user) and sync_post_locations(db, user):
+        db.commit()  # a new account has no posts; kept so 'grid' is honoured on every path
     db.refresh(user)
     return TokenResponse(token=create_token(user), user=user_self(user))
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.callsign == body.callsign))
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Wrong passwords are throttled per callsign (5 in 5 minutes, 20 an
+    hour) and every attempt per client address (20 a minute): 429 with
+    Retry-After, before any password is checked."""
+    call = body.callsign
+    per_call = ((ratelimit.LOGIN_FAILS_SHORT, call), (ratelimit.LOGIN_FAILS_LONG, call))
+    ratelimit.check(*per_call)
+    ratelimit.hit((ratelimit.LOGIN_PER_ADDRESS, ratelimit.client_address(request)))
+    user = db.scalar(select(User).where(User.callsign == call))
     if user is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"no account registered for {body.callsign} on this server — sign up first",
+            f"no account registered for {call} on this server — sign up first",
         )
     if not verify_password(body.password, user.password_hash):
+        if ratelimit.enabled():
+            for t, k in per_call:
+                t.add(k)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect password")
+    for t, k in per_call:
+        t.clear(k)
     return TokenResponse(token=create_token(user), user=user_self(user))

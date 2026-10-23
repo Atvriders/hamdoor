@@ -4,6 +4,13 @@ import time
 import threading
 
 
+class UpstreamError(Exception):
+    """An upstream source did not answer usefully: no connection, an error
+    status, an unreadable reply. Fetchers raise it instead of returning an
+    empty list (which means "the source answered with nothing"); the routes
+    turn it into a 502, and TTLCache.wrap never stores it."""
+
+
 class TTLCache:
     """Tiny thread-safe in-process cache for activity responses."""
 
@@ -25,7 +32,8 @@ class TTLCache:
             self._store[key] = (time.monotonic() + ttl, value)
 
     def wrap(self, key: str, ttl: float, producer):
-        """Return cached value or produce, cache, and return it."""
+        """Return cached value or produce, cache, and return it. A producer
+        that raises (UpstreamError) caches nothing: the next call retries."""
         cached = self.get(key)
         if cached is not None:
             return cached

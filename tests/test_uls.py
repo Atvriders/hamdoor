@@ -1,14 +1,37 @@
-"""ULS importer + hams map endpoints. Uses a tiny fabricated l_amat-style zip;
-no network access."""
+"""ULS importer, geocode cache, data release and backfill. Uses tiny
+fabricated l_amat-style zips and GeoNames files; no network access."""
 
+import csv
+import gzip
+import io
+import shutil
+import sqlite3
 import zipfile
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
+from sqlalchemy import text
 
-from app.integrations import uls
+from app.config import get_settings
+from app.db import engine
+from app.integrations import census_geocoder, uls
+from app.integrations.census_geocoder import GeocodeHit, address_key
 from app.models import Geocode, Ham, User
-from tests.conftest import auth, signup
+from tests.conftest import signup
+
+
+@pytest.fixture(autouse=True)
+def _hermetic(tmp_path, monkeypatch):
+    """Markers, GeoNames cache and downloads live in tmp_path; any real
+    HTTP request fails the test."""
+    monkeypatch.setattr(uls, "_data_dir", lambda: str(tmp_path))
+
+    def no_network(self, request):
+        raise AssertionError(f"network access in a test: {request.url}")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_network)
+    monkeypatch.setattr(census_geocoder.time, "sleep", lambda s: None)
 
 
 def _line(*fields_by_index, total):
@@ -18,43 +41,97 @@ def _line(*fields_by_index, total):
     return "|".join(row) + "\n"
 
 
-@pytest.fixture()
-def mini_uls_zip(tmp_path, monkeypatch):
-    """A minimal ULS extract: one active individual, one active vanity,
-    one terminated license that must be excluded."""
-    hd = (
-        _line((0, "HD"), (1, "1001"), (4, "W1QQQ"), (5, "A"), (6, "HA"), (7, "06/15/2020"), (8, "01/01/2035"), total=59) +
-        _line((0, "HD"), (1, "1002"), (4, "W1NVV"), (5, "A"), (6, "HV"), (7, "01/15/2024"), (8, "02/02/2034"), total=59) +
-        _line((0, "HD"), (1, "1003"), (4, "K0OLD"), (5, "T"), (6, "HA"), (7, "05/05/2000"), (8, "03/03/2010"), total=59)
-    )
-    en = (
-        _line((0, "EN"), (1, "1001"), (4, "W1QQQ"), (8, "QUINN"), (9, "Q"), (10, "QUICK"),
-              (14, "W1QQQ@EXAMPLE.COM"), (15, "10 OAK ST"), (16, "NEWINGTON"),
-              (17, "CT"), (18, "06111"), total=30) +
-        _line((0, "EN"), (1, "1002"), (4, "W1NVV"), (7, "VANITY CLUB"),
-              (15, "20 ELM ST"), (16, "HARTFORD"), (17, "CT"), (18, "06103"), total=30) +
-        _line((0, "EN"), (1, "1003"), (4, "K0OLD"), (7, "OLD TIMER"),
-              (15, "1 MAIN ST"), (16, "NOWHERE"), (17, "KS"), (18, "67801"), total=30)
-    )
-    am = (
-        _line((0, "AM"), (1, "1001"), (4, "W1QQQ"), (5, "E"), total=18) +
-        _line((0, "AM"), (1, "1002"), (4, "W1NVV"), (5, ""), total=18) +
-        _line((0, "AM"), (1, "1003"), (4, "K0OLD"), (5, "T"), total=18)
-    )
-    path = tmp_path / "mini_uls.zip"
-    with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("HD.dat", hd)
-        zf.writestr("EN.dat", en)
-        zf.writestr("AM.dat", am)
+def hd(usi, call, status="A", service="HA", granted="06/15/2020", expires="01/01/2035"):
+    return _line((0, "HD"), (1, usi), (4, call), (5, status), (6, service), (7, granted),
+                 (8, expires), total=59)
 
-    monkeypatch.setattr(uls, "load_zip_centroids",
-                        lambda: {"06111": (41.69, -72.73), "06103": (41.77, -72.68)})
+
+def en(usi, call, street, city, state, zip_, first="", mi="", last="", entity="", email=""):
+    return _line((0, "EN"), (1, usi), (4, call), (7, entity), (8, first), (9, mi), (10, last),
+                 (14, email), (15, street), (16, city), (17, state), (18, zip_), total=30)
+
+
+def am(usi, call, cls):
+    return _line((0, "AM"), (1, usi), (4, call), (5, cls), total=18)
+
+
+def write_uls_zip(path, hd_rows, en_rows, am_rows):
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("HD.dat", "".join(hd_rows))
+        zf.writestr("EN.dat", "".join(en_rows))
+        zf.writestr("AM.dat", "".join(am_rows))
     return str(path)
 
 
-def test_import_hams(mini_uls_zip, db):
+def write_gazetteer(data_dir, us_rows, pr_rows=()):
+    """GeoNames-format files where load_gazetteer caches them. Rows are
+    (zip, place, state, lat, lon, accuracy)."""
+    def line(cc, z, place, st, lat, lon, acc, admin1):
+        return "\t".join([cc, z, place, admin1, st if cc == "US" else "001", "", "", "", "",
+                          str(lat), str(lon), acc]) + "\n"
+    with open(data_dir / "uszips.txt", "w") as fh:
+        for z, place, st, lat, lon, acc in us_rows:
+            fh.write(line("US", z, place, st, lat, lon, acc, "State"))
+    with open(data_dir / "zips_PR.txt", "w") as fh:
+        for z, place, _, lat, lon, acc in pr_rows:
+            fh.write(line("PR", z, place, "", lat, lon, acc, place))
+    for cc in ("GU", "VI", "MP", "AS"):
+        (data_dir / f"zips_{cc}.txt").write_text("")
+
+
+US_PLACES = [("06111", "Newington", "CT", 41.69, -72.73, "4"),
+             ("06103", "Hartford", "CT", 41.77, -72.68, "4"),
+             ("66210", "Overland Park", "KS", 38.93, -94.69, "4")]
+
+
+@pytest.fixture()
+def gazetteer(tmp_path):
+    write_gazetteer(tmp_path, US_PLACES, [("00725", "Caguas", "PR", 18.23, -66.04, "4")])
+    return tmp_path
+
+
+@pytest.fixture()
+def mini_uls_zip(tmp_path, gazetteer):
+    """One active individual, one active vanity club, one terminated license."""
+    return write_uls_zip(
+        tmp_path / "mini_uls.zip",
+        [hd("1001", "W1QQQ"), hd("1002", "W1NVV", service="HV", granted="01/15/2024",
+                                  expires="02/02/2034"),
+         hd("1003", "K0OLD", status="T", granted="05/05/2000", expires="03/03/2010")],
+        [en("1001", "W1QQQ", "10 OAK ST", "NEWINGTON", "CT", "06111", first="QUINN", mi="Q",
+            last="QUICK", email="W1QQQ@EXAMPLE.COM"),
+         en("1002", "W1NVV", "20 ELM ST", "HARTFORD", "CT", "06103", entity="VANITY CLUB"),
+         en("1003", "K0OLD", "1 MAIN ST", "NOWHERE", "KS", "67801", entity="OLD TIMER")],
+        [am("1001", "W1QQQ", "E"), am("1002", "W1NVV", ""), am("1003", "K0OLD", "T")])
+
+
+def _clear_geocodes(db):
+    uls.migrate_hams_table()
     db.query(Geocode).delete()
+    db.execute(text("DELETE FROM geocode_misses"))
     db.commit()
+
+
+def _add_geocode(street, city, state, zip_, lat, lon, quality="Exact", matched=None):
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT OR REPLACE INTO geocodes (address_key, lat, lon, quality, matched_address, source)"
+            " VALUES (:k, :lat, :lon, :q, :m, 'census')"),
+            {"k": address_key(street, city, state, zip_), "lat": lat, "lon": lon, "q": quality,
+             "m": matched})
+
+
+def _ham(callsign):
+    with engine.begin() as conn:
+        r = conn.execute(text("SELECT * FROM hams WHERE callsign = :c"), {"c": callsign}).first()
+    return r
+
+
+# ---------------------------------------------------------------- import
+
+
+def test_import_hams(mini_uls_zip, db):
+    _clear_geocodes(db)
     count = uls.import_hams(zip_path=mini_uls_zip)
     assert count == 2  # K0OLD is terminated and must not appear
 
@@ -67,9 +144,8 @@ def test_import_hams(mini_uls_zip, db):
     assert q.license_class == "E"
     assert q.expires == "01/01/2035"
     assert q.granted == "06/15/2020"
-    # no geocode cached -> jittered ZIP centroid, stays near 06111
-    assert q.lat == pytest.approx(41.69, abs=0.05)
-    assert q.lon == pytest.approx(-72.73, abs=0.05)
+    # no geocode cached -> exactly on the ZIP anchor (GeoNames centroid)
+    assert (q.lat, q.lon) == (41.69, -72.73)
     assert q.loc_source == "zip"
 
     v = db.get(Ham, "W1NVV")
@@ -80,85 +156,232 @@ def test_import_hams(mini_uls_zip, db):
     assert uls.last_import() is not None       # marker written
 
 
+def test_import_stores_iso_dates(tmp_path, gazetteer, db):
+    path = write_uls_zip(tmp_path / "iso.zip",
+                         [hd("1", "W1ISO", granted="12/08/2020", expires="02/26/2031"),
+                          hd("2", "W1BAD", granted="13/45/2020", expires="")],
+                         [en("1", "W1ISO", "1 A ST", "X", "CT", "06111"),
+                          en("2", "W1BAD", "1 B ST", "X", "CT", "06111")],
+                         [am("1", "W1ISO", "G"), am("2", "W1BAD", "G")])
+    uls.import_hams(zip_path=path)
+    good, bad = _ham("W1ISO"), _ham("W1BAD")
+    assert (good.expires_iso, good.granted_iso) == ("2031-02-26", "2020-12-08")
+    assert (good.expires, good.granted) == ("02/26/2031", "12/08/2020")  # kept as-is
+    assert (bad.expires_iso, bad.granted_iso) == ("", "")
+
+
+def test_usi_join_ignores_previous_holders_records(tmp_path, gazetteer, db):
+    """Regression: EN/AM rows were joined by callsign, last row wins, so a
+    recycled call showed the previous holder's name, address and class."""
+    _clear_geocodes(db)
+    _add_geocode("5 OLD RD", "LE SUEUR", "MN", "56058", 44.46, -93.91)
+    path = write_uls_zip(
+        tmp_path / "recycled.zip",
+        [hd("2002", "AA0CE", granted="12/10/2022", expires="12/10/2032"),
+         hd("1001", "AA0CE", status="C", granted="01/01/2011", expires="01/01/2021")],
+        # the current license's rows come first; the old holder's last
+        [en("2002", "AA0CE", "7 NEW ST", "OVERLAND PARK", "KS", "66210", first="NEW",
+            last="HOLDER"),
+         en("1001", "AA0CE", "5 OLD RD", "LE SUEUR", "MN", "56058", first="OLD", last="HOLDER")],
+        [am("2002", "AA0CE", "E"), am("1001", "AA0CE", "T")])
+    uls.import_hams(zip_path=path)
+    h = _ham("AA0CE")
+    assert h.name == "New Holder"       # old code: "Old Holder"
+    assert h.city == "Overland Park" and h.state == "KS"
+    assert h.license_class == "E"       # old code: "T"
+    assert h.loc_source == "zip"        # not the previous holder's street pin
+    assert (h.lat, h.lon) == (38.93, -94.69)
+
+
+def test_zip_level_hams_share_one_anchor_without_jitter(tmp_path, gazetteer, db):
+    """Regression: ZIP-level pins were jittered up to 0.035° (~4 km)."""
+    _clear_geocodes(db)
+    path = write_uls_zip(
+        tmp_path / "zip.zip",
+        [hd("1", "N0AAA"), hd("2", "N0BBB"), hd("3", "N0CCC")],
+        [en("1", "N0AAA", "", "OVERLAND PARK", "KS", "66210"),
+         en("2", "N0BBB", "PO BOX 5", "OVERLAND PARK", "KS", "66210"),
+         en("3", "N0CCC", "", "NOWHERE", "KS", "99999")],
+        [am("1", "N0AAA", "T"), am("2", "N0BBB", "G"), am("3", "N0CCC", "G")])
+    uls.import_hams(zip_path=path)
+    a, b, c = _ham("N0AAA"), _ham("N0BBB"), _ham("N0CCC")
+    assert (a.lat, a.lon) == (b.lat, b.lon) == (38.93, -94.69)
+    assert a.loc_source == b.loc_source == "zip"
+    assert c.lat is None and c.loc_source == ""   # unknown ZIP: not on the map
+
+
+def _metres(lat1, lon1, lat2, lon2):
+    import math
+    return math.hypot((lat1 - lat2) * 111_320, (lon1 - lon2) * 111_320 * math.cos(math.radians(lat1)))
+
+
+def test_zip_anchor_is_median_of_street_hams(tmp_path, gazetteer, db):
+    """With ≥ 5 street-geocoded hams in a ZIP, its ZIP-level hams sit at
+    their coordinate-wise median (GeoNames centroids can be km off)."""
+    _clear_geocodes(db)
+    lats = [38.90, 38.91, 38.95, 38.96, 39.30]  # one far outlier
+    lons = [-94.70, -94.66, -94.65, -94.60, -94.10]
+    hds, ens, ams = [], [], []
+    for i, (la, lo) in enumerate(zip(lats, lons)):
+        call = f"K0S{i}"
+        _add_geocode(f"{i} MAIN ST", "OVERLAND PARK", "KS", "66210", la, lo)
+        hds.append(hd(str(i + 10), call))
+        ens.append(en(str(i + 10), call, f"{i} MAIN ST", "OVERLAND PARK", "KS", "66210"))
+        ams.append(am(str(i + 10), call, "T"))
+    hds.append(hd("99", "K0ZIP"))
+    ens.append(en("99", "K0ZIP", "PO BOX 1", "OVERLAND PARK", "KS", "66210"))
+    ams.append(am("99", "K0ZIP", "T"))
+    uls.import_hams(zip_path=write_uls_zip(tmp_path / "median.zip", hds, ens, ams))
+    z = _ham("K0ZIP")
+    assert z.loc_source == "zip"
+    # the median (38.95, -94.65), not GeoNames 38.93,-94.69 — nudged off K0S2's
+    # home, which the median lands on exactly (V4-F2)
+    assert _metres(z.lat, z.lon, 38.95, -94.65) <= 250
+    assert min(_metres(z.lat, z.lon, la, lo) for la, lo in zip(lats, lons)) >= uls.ANCHOR_CLEARANCE_M
+    with engine.begin() as conn:
+        anchor = conn.execute(text("SELECT * FROM zip_anchors WHERE zip = '66210'")).first()
+    assert (anchor.source, anchor.n_street) == ("median", 5)
+
+    # one street ham fewer -> back to the GeoNames centroid
+    uls.import_hams(zip_path=write_uls_zip(tmp_path / "median4.zip", hds[1:], ens[1:], ams[1:]))
+    assert (_ham("K0ZIP").lat, _ham("K0ZIP").lon) == (38.93, -94.69)
+
+
+def test_territory_zips_are_placed(tmp_path, gazetteer, db):
+    """Regression: GeoNames ships PR/GU/VI/MP/AS outside US.zip, so 78% of
+    Puerto Rico's hams had no location at all."""
+    _clear_geocodes(db)
+    path = write_uls_zip(tmp_path / "pr.zip", [hd("1", "KP4AA")],
+                         [en("1", "KP4AA", "", "CAGUAS", "PR", "00725")], [am("1", "KP4AA", "G")])
+    uls.import_hams(zip_path=path)
+    h = _ham("KP4AA")
+    assert (h.lat, h.lon, h.loc_source) == (18.23, -66.04, "zip")
+
+
+def test_load_gazetteer_territory_state_is_country_code(gazetteer):
+    rows = {r[0]: r for r in uls.load_gazetteer()}
+    assert rows["00725"][1:3] == ("Caguas", "PR")
+    assert rows["66210"] == ("66210", "Overland Park", "KS", 38.93, -94.69, 4)
+
+
+def test_load_gazetteer_downloads_missing_territories(tmp_path, monkeypatch):
+    """Existing data dirs only have uszips.txt: the territory files are
+    fetched (once) from the GeoNames directory of GEONAMES_URL."""
+    write_gazetteer(tmp_path, US_PLACES)
+    for cc in ("PR", "GU", "VI", "MP", "AS"):
+        (tmp_path / f"zips_{cc}.txt").unlink()
+    fetched = []
+
+    def fake_download(url, dest, max_age_hours=None):
+        cc = url.rsplit("/", 1)[1][:2]
+        fetched.append(url)
+        with zipfile.ZipFile(dest, "w") as zf:
+            zf.writestr(f"{cc}.txt", f"{cc}\t96910\tHagatna\tGu\t66\t\t\t\t\t13.45\t144.75\t6\n"
+                        if cc == "GU" else "")
+            zf.writestr("readme.txt", "x")
+
+    monkeypatch.setattr(uls, "_download", fake_download)
+    rows = uls.load_gazetteer()
+    assert sorted(u.rsplit("/", 1)[1] for u in fetched) == ["AS.zip", "GU.zip", "MP.zip", "PR.zip", "VI.zip"]
+    assert all(u.startswith("https://download.geonames.org/export/zip/") for u in fetched)
+    assert ("96910", "Hagatna", "GU", 13.45, 144.75, 6) in rows
+    uls.load_gazetteer()
+    assert len(fetched) == 5  # cached after the first fetch
+
+
+def test_places_table_built_at_import(mini_uls_zip, db):
+    uls.import_hams(zip_path=mini_uls_zip)
+    with engine.begin() as conn:
+        rows = {r.zip: tuple(r) for r in conn.execute(text("SELECT * FROM places"))}
+    assert rows["66210"] == ("66210", "Overland Park", "KS", 38.93, -94.69, 4)
+    assert rows["00725"][2] == "PR"
+
+
 def test_import_uses_cached_street_geocode(mini_uls_zip, db):
-    from app.integrations.census_geocoder import address_key
-    db.query(Geocode).delete()
-    db.commit()
-    db.add(Geocode(address_key=address_key("10 OAK ST", "Newington", "CT", "06111"),
-                   lat=41.71489, lon=-72.72687, quality="Exact"))
-    db.commit()
+    _clear_geocodes(db)
+    _add_geocode("10 OAK ST", "Newington", "CT", "06111", 41.71489, -72.72687)
     uls.import_hams(zip_path=mini_uls_zip)
     q = db.get(Ham, "W1QQQ")
     assert q.lat == pytest.approx(41.71489, abs=1e-5)   # exact street location
     assert q.lon == pytest.approx(-72.72687, abs=1e-5)
     assert q.loc_source == "address"
-    # the un-geocoded ham still falls back to its ZIP centroid
+    # the un-geocoded ham still falls back to its ZIP anchor
     assert db.get(Ham, "W1NVV").loc_source == "zip"
 
 
-def test_geocode_backfill(mini_uls_zip, db, monkeypatch):
-    db.query(Geocode).delete()
-    db.commit()
-    uls.import_hams(zip_path=mini_uls_zip)
-    missing = uls.missing_geocode_addresses()
-    assert len(missing) == 2                   # both mini-zip hams have streets
-
-    fake = {key: (41.7, -72.7, "Exact") for key, *_ in missing}
-
-    def fake_batch(rows, on_chunk=None):
-        if on_chunk:
-            on_chunk(fake)
-        return fake
-
-    monkeypatch.setattr("app.integrations.census_geocoder.geocode_batch", fake_batch)
-    added = uls.geocode_backfill()
-    assert added == 2
-    assert uls.missing_geocode_addresses() == []
-
-
-def test_fetch_data_release(db, tmp_path, monkeypatch):
-    import gzip
-    import shutil
-    import sqlite3
-
-    # build a tiny release artifact
-    raw = tmp_path / "geocodes.sqlite"
-    conn = sqlite3.connect(raw)
-    conn.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL, quality TEXT)")
-    conn.executemany("INSERT INTO geocodes VALUES (?,?,?,?)",
-                     [("ADDR|ONE|CT|06111", 41.0, -72.0, "Exact"),
-                      ("ADDR|TWO|CT|06103", 42.0, -73.0, "Tie")])
-    conn.commit()
-    conn.close()
-    gz_path = tmp_path / "artifact.gz"
-    with open(raw, "rb") as fi, gzip.open(gz_path, "wb") as fo:
-        shutil.copyfileobj(fi, fo)
-
-    monkeypatch.setattr(uls, "_download",
-                        lambda url, dest, max_age_hours=None: shutil.copy(gz_path, dest))
-    db.query(Geocode).delete()
-    db.commit()
-
-    assert uls.fetch_data_release() == 2
-    assert db.query(Geocode).count() == 2
-    # second merge is a no-op (INSERT OR IGNORE)
-    assert uls.fetch_data_release() == 0
-    assert db.query(Geocode).count() == 2
+def test_non_exact_geocode_on_another_street_is_demoted(tmp_path, gazetteer, db):
+    """Regression: a Census Non_Exact match on a different street / town /
+    state was drawn as the ham's street pin (50–700 km off)."""
+    _clear_geocodes(db)
+    cases = {
+        # call: (street, matched address, quality, expected loc)
+        "K0WS": ("1383 PARKVIEW DR", "1383 PARKVIEW CT, RICHMOND, KY, 40475", "Non_Exact", "zip"),
+        "K0WT": ("70 NORTHFORK DRIVE", "70 SOUTHFORK DR, OVERLAND PARK, KS, 66210", "Non_Exact", "zip"),
+        "K0OK": ("138 VANGAURD AVE APT 2", "138 VANGUARD AVE, OVERLAND PARK, KS, 66212", "Non_Exact", "address"),
+        "K0OL": ("15 ELM", "15 ELM ST, OVERLAND PARK, KS, 66210", "Non_Exact", "address"),
+        "K0EX": ("9 MAPLE ST", "9 MAPLE ST, OVERLAND PARK, KS, 66210", "Exact", "address"),
+        "K0NM": ("4 PINE RD", None, "Non_Exact", "address"),  # old release: no matched address
+        # review B1-3: a prefix-named street of the same town is another street
+        "K0PX": ("12 OAK HILL RD", "12 OAK ST, OVERLAND PARK, KS, 66210", "Non_Exact", "zip"),
+        # review B1-4: compass-word and care-of addresses on the very same street
+        "K0CW": ("123 E NORTH ST", "123 E NORTH ST, OVERLAND PARK, KS, 66210", "Non_Exact", "address"),
+        "K0CO": ("C/O J DOE 7 ELM AVE", "7 ELM AVE, OVERLAND PARK, KS, 66210", "Non_Exact", "address"),
+    }
+    hds, ens, ams = [], [], []
+    for i, (call, (street, matched, quality, _)) in enumerate(cases.items()):
+        _add_geocode(street, "OVERLAND PARK", "KS", "66210", 38.9 + i / 100, -94.7, quality, matched)
+        hds.append(hd(str(i), call))
+        ens.append(en(str(i), call, street, "OVERLAND PARK", "KS", "66210"))
+        ams.append(am(str(i), call, "G"))
+    uls.import_hams(zip_path=write_uls_zip(tmp_path / "nonexact.zip", hds, ens, ams))
+    for call, (*_, expected) in cases.items():
+        assert _ham(call).loc_source == expected, call
 
 
-def test_parse_census_response():
-    from app.integrations.census_geocoder import parse_batch_response
-    sample = (
-        '"1","225 Main St, Newington, CT, 06111","Match","Exact",'
-        '"225 MAIN ST, NEWINGTON, CT, 06111","-72.72687,41.71489","3514734","R"\n'
-        '"2","1 Infinite Loop, Cupertino, CA, 95014","No_Match"\n'
-        '"3","1 Main St, Nowhere, CT, 06001","Tie","Exact",'
-        '"1 MAIN ST, NOWHERE, CT, 06001","-72.70,41.70","123","L"\n'
-    )
-    out = parse_batch_response(sample)
-    assert out["1"] == (41.71489, -72.72687, "Exact")
-    assert "2" not in out                       # No_Match dropped
-    assert out["3"][0] == pytest.approx(41.70)  # Tie accepted
+def test_import_stages_in_short_transactions(tmp_path, gazetteer, db, monkeypatch):
+    """Regression: the import held one write transaction for ~30–45 s, so
+    signups and posts failed with "database is locked" (5 s busy timeout).
+    Rows are now staged in chunks, indexes and the aggregate on the staging
+    table, and only the rename swap runs at the end."""
+    from contextlib import contextmanager
+
+    monkeypatch.setattr(uls, "_CHUNK", 3)
+    monkeypatch.setattr(uls, "_LOCK_GAP_SECONDS", 0)
+    txns = []
+    real_txn = uls._txn
+
+    @contextmanager
+    def spy(conn, fast_free=False):
+        stmts = []
+        conn.set_trace_callback(stmts.append)
+        try:
+            with real_txn(conn, fast_free) as c:
+                yield c
+        finally:
+            conn.set_trace_callback(None)
+            txns.append(stmts)
+
+    monkeypatch.setattr(uls, "_txn", spy)
+    calls = [f"K1T{i}" for i in range(7)]
+    path = write_uls_zip(tmp_path / "chunks.zip", [hd(str(i), c) for i, c in enumerate(calls)],
+                         [en(str(i), c, "", "NEWINGTON", "CT", "06111") for i, c in enumerate(calls)],
+                         [am(str(i), c, "T") for i, c in enumerate(calls)])
+    names = []
+    for _ in range(3):
+        txns.clear()
+        assert uls.import_hams(zip_path=path) == 7
+        inserts = [t for t in txns if any(s.startswith("INSERT INTO hams_import") for s in t)]
+        assert len(inserts) == 3                       # 3 + 3 + 1 rows
+        (swap,) = [t for t in txns if any("RENAME TO hams" in s for s in t)]
+        assert not any("INSERT INTO hams_import" in s or "CREATE INDEX ix_hams" in s for s in swap)
+        with engine.begin() as conn:
+            names.append(sorted(r[0] for r in conn.execute(text(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'hams'"
+                " AND name LIKE 'ix_hams_map%'"))))
+            assert conn.execute(text("SELECT COUNT(*) FROM sqlite_master"
+                                     " WHERE name LIKE '%_import'")).scalar() == 0
+            assert conn.execute(text("SELECT valid FROM hams_cluster_meta")).scalar() == 1
+    assert len({n[0] for n in names}) == 2 and all(len(n) == 1 for n in names)  # names alternate
 
 
 def test_import_swap_replaces_data(mini_uls_zip, db):
@@ -168,6 +391,50 @@ def test_import_swap_replaces_data(mini_uls_zip, db):
     uls.import_hams(zip_path=mini_uls_zip)     # second run swaps cleanly
     assert db.get(Ham, "EXTRA1") is None
     assert db.get(Ham, "W1QQQ") is not None
+
+
+def test_migrate_old_table_adds_iso_columns_and_forces_reimport(tmp_path, db):
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS hams"))
+        conn.execute(text(
+            "CREATE TABLE hams (callsign TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',"
+            " street TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '',"
+            " state TEXT NOT NULL DEFAULT '', zip TEXT NOT NULL DEFAULT '',"
+            " email TEXT NOT NULL DEFAULT '', license_class TEXT NOT NULL DEFAULT '',"
+            " expires TEXT NOT NULL DEFAULT '', granted TEXT NOT NULL DEFAULT '',"
+            " lat REAL, lon REAL, loc_source TEXT NOT NULL DEFAULT '')"))
+        conn.execute(text("INSERT INTO hams (callsign, expires, granted)"
+                          " VALUES ('W1MIG', '02/26/2031', '12/08/2020')"))
+    uls._touch_marker()
+    uls.migrate_hams_table()
+    h = _ham("W1MIG")
+    assert (h.expires_iso, h.granted_iso) == ("2031-02-26", "2020-12-08")
+    assert uls.last_import() is None  # the scheduler re-imports right away
+    uls._touch_marker()
+    uls.migrate_hams_table()          # idempotent: no second forced re-import
+    assert uls.last_import() is not None
+
+
+# ---------------------------------------------------------------- users follow imports
+
+
+def test_users_follow_every_import(client, mini_uls_zip, db, monkeypatch):
+    """Regression: users were only re-synced at app startup, so a user who
+    signed up before the geocode existed stayed at the ZIP/grid centre."""
+    monkeypatch.setattr("app.integrations.geocode.geocode_address", lambda *a: None)
+    _clear_geocodes(db)
+    uls.import_hams(zip_path=mini_uls_zip)
+    db.query(User).filter_by(callsign="W1QQQ").delete()
+    db.commit()
+    signup(client, "W1QQQ")  # FCC profile from the local ULS row; grid unknown
+    user = db.query(User).filter_by(callsign="W1QQQ").one()
+    assert (user.lat, user.lon) == (41.69, -72.73)   # ZIP anchor
+
+    _add_geocode("10 OAK ST", "Newington", "CT", "06111", 41.71489, -72.72687)
+    uls.import_hams(zip_path=mini_uls_zip)           # no manual sync call
+    db.expire_all()
+    user = db.query(User).filter_by(callsign="W1QQQ").one()
+    assert (user.lat, user.lon) == (41.71489, -72.72687)
 
 
 def test_lookup_falls_back_to_local_uls(client, mini_uls_zip, db):
@@ -181,107 +448,491 @@ def test_lookup_falls_back_to_local_uls(client, mini_uls_zip, db):
     assert "ULS" in data["source"]
 
 
-def test_signup_via_local_uls_only(client, mini_uls_zip, db, monkeypatch):
-    db.query(Geocode).delete()
-    db.commit()
+# ---------------------------------------------------------------- Census batch
+
+
+def test_parse_census_response():
+    sample = (
+        '"1","225 Main St, Newington, CT, 06111","Match","Exact",'
+        '"225 MAIN ST, NEWINGTON, CT, 06111","-72.72687,41.71489","3514734","R"\n'
+        '"2","1 Infinite Loop, Cupertino, CA, 95014","No_Match"\n'
+        '"3","8800 Pine Mountain Rd, Springville, AL, 35146","Tie"\n'
+    )
+    hits, misses = census_geocoder.parse_batch_response(sample)
+    assert hits["1"] == GeocodeHit(41.71489, -72.72687, "Exact", "225 MAIN ST, NEWINGTON, CT, 06111")
+    assert misses == {"2": "No_Match", "3": "Tie"}   # old code accepted Tie as a match
+
+
+class FakeCensus:
+    """Stands in for httpx.Client in census_geocoder: records each posted CSV
+    and answers like the batch API (echoed IDs lose their backslashes)."""
+
+    def __init__(self, answer):
+        self.answer = answer  # (street, attempt) -> "match" | "nomatch" | None (row dropped)
+        self.posts = []
+
+    def __call__(self, *a, **kw):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, url, data=None, files=None):
+        body = files["addressFile"][1]
+        rows = list(csv.reader(io.StringIO(body)))
+        self.posts.append(rows)
+        out = io.StringIO()
+        w = csv.writer(out, quoting=csv.QUOTE_ALL)
+        for rid, street, city, state, zip_ in rows:
+            verdict = self.answer(street, len(self.posts))
+            rid = rid.replace("\\", "")
+            if verdict == "match":
+                w.writerow([rid, f"{street}, {city}, {state}, {zip_}", "Match", "Exact",
+                            f"{street.upper()}, {city.upper()}, {state}, {zip_}",
+                            "-72.7,41.7", "1", "L"])
+            elif verdict == "nomatch":
+                w.writerow([rid, f"{street}, {city}, {state}, {zip_}", "No_Match"])
+        return httpx.Response(200, text=out.getvalue())
+
+
+def test_geocode_batch_sends_numeric_ids_and_maps_back(monkeypatch):
+    """Regression: address keys were sent as batch IDs; Census strips
+    backslashes from echoed IDs, filing results under the wrong key."""
+    fake = FakeCensus(lambda street, attempt: "match" if "OAK" in street else "nomatch")
+    monkeypatch.setattr(census_geocoder.httpx, "Client", fake)
+    rows = [("1 OAK ST\\B|X|CT|06111", "1 OAK ST\\B", "X", "CT", "06111"),
+            ("2 ELM ST|X|CT|06111", "2 ELM ST", "X", "CT", "06111")]
+    hits, misses = census_geocoder.geocode_batch(rows)
+    assert [r[0] for r in fake.posts[0]] == ["0", "1"]
+    assert set(hits) == {"1 OAK ST\\B|X|CT|06111"}
+    assert misses == {"2 ELM ST|X|CT|06111": "No_Match"}
+
+
+def test_unmatchable_batch_with_healthy_controls_is_accepted_first_time(monkeypatch):
+    """Regression (verifier note 1): a batch of hard addresses matches ~0.5%,
+    which the old <20% rule took for throttling: 4 POSTs per chunk, forever."""
+    controls = [(f"{i} GOOD ST", "X", "CT", "06111") for i in range(10)]
+    fake = FakeCensus(lambda street, attempt: "match" if "GOOD" in street else "nomatch")
+    monkeypatch.setattr(census_geocoder.httpx, "Client", fake)
+    rows = [(f"K{i}", f"{i} HARD RD", "X", "CT", "06111") for i in range(50)]
+    hits, misses = census_geocoder.geocode_batch(rows, controls=controls)
+    assert len(fake.posts) == 1
+    assert hits == {} and len(misses) == 50
+    assert len(fake.posts[0]) == 60   # controls ride along, never reported
+
+
+def test_probe_seeded_from_first_batch_when_cache_is_empty(monkeypatch):
+    """The CI build starts with an empty cache (no controls): the first
+    healthy batch's exact matches become the probe for the rest, so hard
+    batches go through in one POST and throttled replies are still caught
+    (and never parked as unmatchable)."""
+    monkeypatch.setattr(get_settings(), "census_batch_size", 30)
+    # every address of POST no. 3 comes back No_Match: a throttled reply
+    fake = FakeCensus(lambda street, post: "nomatch" if post == 3 or "HARD" in street else "match")
+    monkeypatch.setattr(census_geocoder.httpx, "Client", fake)
+    rows = [(f"G{i}", f"{i} GOOD ST", "X", "CT", "06111") for i in range(30)]
+    rows += [(f"H{i}", f"{i} HARD RD", "X", "CT", "06111") for i in range(40)]
+    hits, misses = census_geocoder.geocode_batch(rows)
+    assert len(hits) == 30 and len(misses) == 40
+    # 1 healthy batch, then 4 batches of 10 hard rows + 20 controls; the
+    # throttled 3rd POST is retried once. The old <20% rule: 1 + 4 x 4 POSTs
+    assert len(fake.posts) == 6
+    assert [len(p) for p in fake.posts] == [30, 30, 30, 30, 30, 30]
+
+
+def test_throttled_reply_detected_by_controls_and_retried(monkeypatch):
+    controls = [(f"{i} GOOD ST", "X", "CT", "06111") for i in range(10)]
+    # attempt 1: the service is throttling (everything No_Match); attempt 2 healthy
+    fake = FakeCensus(lambda street, attempt: "nomatch" if attempt == 1 or "HARD" in street else "match")
+    monkeypatch.setattr(census_geocoder.httpx, "Client", fake)
+    rows = [("A", "1 OAK ST", "X", "CT", "06111"), ("B", "2 HARD RD", "X", "CT", "06111")]
+    hits, misses = census_geocoder.geocode_batch(rows, controls=controls)
+    assert len(fake.posts) == 2
+    assert set(hits) == {"A"} and misses == {"B": "No_Match"}
+
+    # still throttled after every retry: keep nothing as "unmatchable"
+    fake = FakeCensus(lambda street, attempt: "nomatch")
+    monkeypatch.setattr(census_geocoder.httpx, "Client", fake)
+    hits, misses = census_geocoder.geocode_batch(rows, controls=controls)
+    assert len(fake.posts) == 4 and hits == {} and misses == {}
+
+
+# ---------------------------------------------------------------- backfill / misses
+
+
+def test_geocode_backfill_records_hits_and_misses(mini_uls_zip, db, monkeypatch):
+    _clear_geocodes(db)
     uls.import_hams(zip_path=mini_uls_zip)
-    # no network geocoding in tests; the ham's ZIP centroid should be used
+    missing = uls.missing_geocode_addresses()
+    assert len(missing) == 2                   # both mini-zip hams have streets
+
+    calls = []
+
+    def fake_batch(rows, on_chunk=None, controls=None):
+        calls.append([r[0] for r in rows])
+        hits = {k: GeocodeHit(41.7, -72.7, "Exact", "10 OAK ST, NEWINGTON, CT, 06111")
+                for k, s, *_ in rows if "OAK" in s}
+        misses = {k: "No_Match" for k, s, *_ in rows if "OAK" not in s}
+        on_chunk(hits, misses)
+        return hits, misses
+
+    monkeypatch.setattr(census_geocoder, "geocode_batch", fake_batch)
+    assert uls.geocode_backfill() == 1
+    assert uls.missing_geocode_addresses() == []    # the miss is parked, not re-sent
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT * FROM geocodes")).first()
+        miss = conn.execute(text("SELECT * FROM geocode_misses")).first()
+    assert (row.matched_address, row.source) == ("10 OAK ST, NEWINGTON, CT, 06111", "census")
+    assert (miss.status, miss.tries) == ("No_Match", 1)
+
+    assert uls.geocode_backfill() == 0
+    assert len(calls) == 1                         # nothing due -> no Census call
+
+    # a month later the miss is due again, and a second failure counts a try
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE geocode_misses SET last_try = '2020-01-01T00:00:00Z'"))
+    assert [k for k, *_ in uls.missing_geocode_addresses()] == [miss.address_key]
+    uls.geocode_backfill()
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT tries FROM geocode_misses")).scalar() == 2
+
+
+def test_ensure_fresh_completes_when_only_unmatchable_addresses_remain(
+        tmp_path, gazetteer, db, monkeypatch):
+    """Regression (verifier note 1): with ~42k unmatchable addresses the old
+    ensure_fresh returned False forever — every 30 min it re-downloaded the
+    release, re-posted the addresses and re-imported 822k rows."""
+    _clear_geocodes(db)
+    hds, ens, ams = [], [], []
+    for i in range(8):
+        call = f"K0U{i}"
+        hds.append(hd(str(i), call))
+        ens.append(en(str(i), call, f"{i} NOWHERE RD", "OVERLAND PARK", "KS", "66210"))
+        ams.append(am(str(i), call, "T"))
+    path = write_uls_zip(tmp_path / "l_amat.zip", hds, ens, ams)
+    s = get_settings()
+    monkeypatch.setattr(s, "uls_import_enabled", True)
+    monkeypatch.setattr(s, "geocode_backfill_threshold", 3)
+    monkeypatch.setattr(s, "data_release_enabled", False)
+    downloads, batches, imports = [], [], []
+    monkeypatch.setattr(uls, "_download", lambda url, dest, max_age_hours=None: downloads.append(url))
+    real_import = uls.import_hams
+    monkeypatch.setattr(uls, "import_hams", lambda zip_path=None: imports.append(1) or real_import(path))
+
+    def fake_batch(rows, on_chunk=None, controls=None):
+        batches.append(len(rows))
+        misses = {k: "No_Match" for k, *_ in rows}
+        on_chunk({}, misses)
+        return {}, misses
+
+    monkeypatch.setattr(census_geocoder, "geocode_batch", fake_batch)
+    assert uls.ensure_fresh() is True          # imported, tried all 8, parked them
+    assert batches == [8] and len(imports) == 1
+    assert uls.ensure_fresh() is True          # next check: nothing to do
+    assert batches == [8] and len(imports) == 1
+
+
+def _release(tmp_path, name, rows, new_format):
+    raw = tmp_path / f"{name}.sqlite"
+    conn = sqlite3.connect(raw)
+    extra = ", matched_address TEXT, source TEXT" if new_format else ""
+    conn.execute(f"CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL, quality TEXT{extra})")
+    for key, lat, lon, q, matched in rows:
+        vals = (key, lat, lon, q) + ((matched, "census") if new_format else ())
+        conn.execute(f"INSERT INTO geocodes VALUES ({', '.join('?' for _ in vals)})", vals)
+    conn.commit()
+    conn.close()
+    gz = tmp_path / f"{name}.gz"
+    with open(raw, "rb") as fi, gzip.open(gz, "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+    return gz
+
+
+def test_release_fetched_weekly_until_matched_addresses_arrive(mini_uls_zip, tmp_path, db, monkeypatch):
+    """Caches built from old releases have no Census matched address, so
+    their Non_Exact matches can't be vetted: keep fetching the release
+    (weekly at most) until one with matched addresses has been merged, then
+    only when many addresses are due."""
+    _clear_geocodes(db)
+    k1 = address_key("10 OAK ST", "Newington", "CT", "06111")
+    _add_geocode("10 OAK ST", "Newington", "CT", "06111", 41.71, -72.72, "Non_Exact")
+    _add_geocode("20 ELM ST", "Hartford", "CT", "06103", 41.77, -72.68, "Exact")
+    uls.import_hams(zip_path=mini_uls_zip)        # nothing due: both addresses cached
+    s = get_settings()
+    monkeypatch.setattr(s, "uls_import_enabled", True)
+    monkeypatch.setattr(uls, "import_hams", lambda zip_path=None: 2)
+    old = _release(tmp_path, "old", [(k1, 41.71, -72.72, "Non_Exact", None)], new_format=False)
+    new = _release(tmp_path, "new", [(k1, 41.71, -72.72, "Non_Exact", "10 OAK RD, NEWINGTON, CT, 06111")],
+                   new_format=True)
+    served = [old]
+    downloads = []
+
+    def fake_download(url, dest, max_age_hours=None):
+        downloads.append(url)
+        shutil.copy(served[0], dest)
+
+    monkeypatch.setattr(uls, "_download", fake_download)
+
+    def age_release_marker():
+        aged = datetime.now(timezone.utc) - timedelta(days=s.uls_refresh_days + 1)
+        (tmp_path / ".data_release_fetched").write_text(aged.isoformat())
+
+    assert uls.ensure_fresh() is True and len(downloads) == 1   # old-format release
+    assert uls.ensure_fresh() is True and len(downloads) == 1   # not again the same week
+    age_release_marker()
+    served[0] = new
+    assert uls.ensure_fresh() is True and len(downloads) == 2   # a week later: new format
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT matched_address FROM geocodes WHERE address_key = :k"),
+                            {"k": k1}).scalar() == "10 OAK RD, NEWINGTON, CT, 06111"
+    age_release_marker()
+    assert uls.ensure_fresh() is True and len(downloads) == 2   # nothing due: no more downloads
+
+
+def test_fetch_data_release_merges_old_format_once_per_refresh(db, tmp_path, monkeypatch):
+    raw = tmp_path / "geocodes.sqlite"
+    conn = sqlite3.connect(raw)
+    conn.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL, quality TEXT)")
+    conn.executemany("INSERT INTO geocodes VALUES (?,?,?,?)",
+                     [("ADDR|ONE|CT|06111", 41.0, -72.0, "Exact"),
+                      ("ADDR|TWO|CT|06103", 42.0, -73.0, "Non_Exact")])
+    conn.commit()
+    conn.close()
+    gz_path = tmp_path / "artifact.gz"
+    with open(raw, "rb") as fi, gzip.open(gz_path, "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+    downloads = []
+
+    def fake_download(url, dest, max_age_hours=None):
+        downloads.append(url)
+        shutil.copy(gz_path, dest)
+
+    monkeypatch.setattr(uls, "_download", fake_download)
+    _clear_geocodes(db)
+
+    assert uls.fetch_data_release() == 2
+    assert db.query(Geocode).count() == 2
+    # regression: the next scheduler pass (30 min later) must not download 45 MB again
+    assert uls.fetch_data_release() == 0
+    assert downloads == [get_settings().data_release_url]
+    # after a refresh period it does
+    old = datetime.now(timezone.utc) - timedelta(days=get_settings().uls_refresh_days + 1)
+    (tmp_path / ".data_release_fetched").write_text(old.isoformat())
+    assert uls.fetch_data_release() == 0       # same content: nothing new to merge
+    assert len(downloads) == 2
+
+
+def test_fetch_data_release_new_format_upgrades_rows_and_merges_misses(db, tmp_path, monkeypatch):
+    _clear_geocodes(db)
+    with engine.begin() as conn:  # an old-format local row and a stale local miss
+        conn.execute(text("INSERT INTO geocodes (address_key, lat, lon, quality)"
+                          " VALUES ('ADDR|ONE|CT|06111', 41.0, -72.0, 'Non_Exact')"))
+        conn.execute(text("INSERT INTO geocode_misses VALUES"
+                          " ('ADDR|THREE|CT|06111', 'No_Match', 3, '2026-01-01T00:00:00Z')"))
+    raw = tmp_path / "geocodes.sqlite"
+    conn = sqlite3.connect(raw)
+    conn.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL,"
+                 " quality TEXT, matched_address TEXT, source TEXT)")
+    conn.executemany("INSERT INTO geocodes VALUES (?,?,?,?,?,?)", [
+        ("ADDR|ONE|CT|06111", 41.5, -72.5, "Non_Exact", "1 ADDR, ONE, CT, 06111", "census"),
+        ("ADDR|TWO|CT|06103", 42.0, -73.0, "Exact", "2 ADDR, TWO, CT, 06103", "census")])
+    conn.execute("CREATE TABLE geocode_misses (address_key TEXT PRIMARY KEY, status TEXT,"
+                 " tries INTEGER, last_try TEXT)")
+    conn.executemany("INSERT INTO geocode_misses VALUES (?,?,?,?)", [
+        ("ADDR|THREE|CT|06111", "Tie", 1, "2026-10-12T00:00:00Z"),
+        ("ADDR|FOUR|CT|06111", "No_Match", 2, "2026-10-12T00:00:00Z")])
+    conn.commit()
+    conn.close()
+    gz_path = tmp_path / "artifact.gz"
+    with open(raw, "rb") as fi, gzip.open(gz_path, "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+    monkeypatch.setattr(uls, "_download", lambda url, dest, max_age_hours=None: shutil.copy(gz_path, dest))
+
+    assert uls.fetch_data_release() == 2     # one upgraded, one inserted
+    with engine.begin() as conn:
+        one = conn.execute(text("SELECT * FROM geocodes WHERE address_key = 'ADDR|ONE|CT|06111'")).first()
+        misses = {r.address_key: tuple(r)[1:] for r in conn.execute(text("SELECT * FROM geocode_misses"))}
+    assert (one.lat, one.matched_address, one.source) == (41.5, "1 ADDR, ONE, CT, 06111", "census")
+    assert misses == {"ADDR|THREE|CT|06111": ("Tie", 3, "2026-10-12T00:00:00Z"),
+                      "ADDR|FOUR|CT|06111": ("No_Match", 2, "2026-10-12T00:00:00Z")}
+
+
+def test_release_builder_exports_new_columns_and_misses(db, tmp_path, monkeypatch):
+    import tools.build_data_release as tool
+
+    _clear_geocodes(db)
+    _add_geocode("1 A ST", "X", "CT", "06111", 41.0, -72.0, "Non_Exact", "1 A ST, X, CT, 06111")
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO geocode_misses VALUES ('2 B ST|X|CT|06111', 'Tie', 1, '2026-10-12T00:00:00Z')"))
+    monkeypatch.setattr(tool, "OUT_DIR", str(tmp_path / "build"))
+    monkeypatch.setattr(tool.uls, "import_hams", lambda: 0)
+    monkeypatch.setattr(tool.uls, "geocode_backfill", lambda: 0)
+    with pytest.raises(SystemExit):     # the "suspiciously few" guard still fires
+        tool.main()
+    with gzip.open(tmp_path / "build" / "geocodes.sqlite.gz", "rb") as fi, \
+            open(tmp_path / "out.sqlite", "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+    conn = sqlite3.connect(tmp_path / "out.sqlite")
+    assert conn.execute("SELECT matched_address, source FROM geocodes").fetchall() == \
+        [("1 A ST, X, CT, 06111", "census")]
+    assert conn.execute("SELECT * FROM geocode_misses").fetchall() == \
+        [("2 B ST|X|CT|06111", "Tie", 1, "2026-10-12T00:00:00Z")]
+    conn.close()
+
+
+def test_signup_via_local_uls_only(client, mini_uls_zip, db, monkeypatch):
+    _clear_geocodes(db)
+    uls.import_hams(zip_path=mini_uls_zip)
+    db.query(User).filter_by(callsign="W1QQQ").delete()
+    db.commit()
+    # no network geocoding in tests; the ham's ZIP anchor should be used
     monkeypatch.setattr("app.integrations.geocode.resolve_location", lambda *a: None)
     data = signup(client, "W1QQQ")
     assert data["user"]["name"] == "Quinn Q Quick"
-    assert data["user"]["lat"] == pytest.approx(41.69, abs=0.05)
+    assert (data["user"]["lat"], data["user"]["lon"]) == (41.69, -72.73)
 
 
-def test_existing_user_snapped_to_street_level(client, mini_uls_zip, db):
-    from app.integrations.census_geocoder import address_key
-    from app.routes.users import sync_user_locations
+def test_migrate_users_table_adds_map_precision(tmp_path):
+    """A users table from before map_precision existed gains the column, and
+    every existing member keeps being shown where they are shown today."""
+    import sqlite3
 
-    db.query(Geocode).delete()
-    db.add(Geocode(address_key=address_key("10 OAK ST", "Newington", "CT", "06111"),
-                   lat=41.71489, lon=-72.72687, quality="Exact"))
-    db.commit()
+    from sqlalchemy import create_engine
+
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, callsign TEXT)")
+    con.execute("INSERT INTO users (callsign) VALUES ('W1OLD')")
+    con.commit()
+    con.close()
+    eng = create_engine(f"sqlite:///{path}")
+    uls.migrate_users_table(eng)
+    uls.migrate_users_table(eng)  # idempotent: a second start changes nothing
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT map_precision FROM users WHERE callsign = 'W1OLD'").fetchone() == ("address",)
+    con.close()
+
+
+# ---------------------------------------------------------------- final pass: V4-F5, V4-F2, V3-F3, V3-F2
+
+
+def test_a_zip_from_another_state_leaves_the_licence_unplaced(tmp_path, gazetteer, db):
+    """V4-F5 regression: FCC ZIP typos put licences in another state or
+    territory (Honolulu with a Washington ZIP, 4,219 km off)."""
+    _clear_geocodes(db)
+    path = write_uls_zip(
+        tmp_path / "typo.zip", [hd("1", "KH6ZZT"), hd("2", "K0ZZK")],
+        [en("1", "KH6ZZT", "", "HONOLULU", "HI", "66210"),      # 66210 is Overland Park, KS
+         en("2", "K0ZZK", "", "OVERLAND PARK", "KS", "66210")],
+        [am("1", "KH6ZZT", "G"), am("2", "K0ZZK", "G")])
+    uls.import_hams(zip_path=path)
+    typo, ok = _ham("KH6ZZT"), _ham("K0ZZK")
+    assert typo.lat is None and typo.loc_source == ""          # old code: placed in Kansas
+    assert (ok.lat, ok.lon, ok.loc_source) == (38.93, -94.69, "zip")
+
+
+def test_zip_anchor_ignores_mail_drops_and_keeps_off_homes(tmp_path, gazetteer, db):
+    """V4-F2 regression: the anchor (a coordinate-wise median) landed exactly
+    on a mail drop with 377 licensees, or on one licensee's home, hiding
+    that pin under the dashed ZIP group."""
+    _clear_geocodes(db)
+    homes = [(38.90, -94.70), (38.91, -94.66), (38.95, -94.65), (38.96, -94.60), (39.30, -94.10)]
+    hds, ens, ams = [], [], []
+    for i, (la, lo) in enumerate(homes):
+        _add_geocode(f"{i} MAIN ST", "OVERLAND PARK", "KS", "66210", la, lo)
+        hds.append(hd(str(10 + i), f"K0H{i}"))
+        ens.append(en(str(10 + i), f"K0H{i}", f"{i} MAIN ST", "OVERLAND PARK", "KS", "66210"))
+        ams.append(am(str(10 + i), f"K0H{i}", "T"))
+    _add_geocode("9 MAILBOX WAY", "OVERLAND PARK", "KS", "66210", 39.20, -94.20)
+    for i in range(12):  # a mail drop: 12 licensees at one point
+        hds.append(hd(str(100 + i), f"K0M{i:02d}"))
+        ens.append(en(str(100 + i), f"K0M{i:02d}", "9 MAILBOX WAY", "OVERLAND PARK", "KS", "66210"))
+        ams.append(am(str(100 + i), f"K0M{i:02d}", "G"))
+    hds.append(hd("99", "K0ZIP"))
+    ens.append(en("99", "K0ZIP", "PO BOX 1", "OVERLAND PARK", "KS", "66210"))
+    ams.append(am("99", "K0ZIP", "T"))
+    uls.import_hams(zip_path=write_uls_zip(tmp_path / "drop.zip", hds, ens, ams))
+    z = _ham("K0ZIP")
+    # the median of the five homes (38.95, -94.65) — old code: the mail drop
+    # pulled it to (39.2, -94.2) — nudged off the home it lands on
+    assert _metres(z.lat, z.lon, 38.95, -94.65) <= 250
+    assert min(_metres(z.lat, z.lon, la, lo) for la, lo in homes + [(39.20, -94.20)]) >= 25
+
+
+def test_derived_tables_are_built_for_an_upgraded_database(mini_uls_zip, db):
+    """V3-F3 regression: a database upgraded from a4ac1e7 had no cluster
+    aggregate, places or ZIP anchors until its first import (forever with
+    imports off): zoomed-out maps took ~5.5 s and place search was empty."""
+    _clear_geocodes(db)
     uls.import_hams(zip_path=mini_uls_zip)
+    with engine.begin() as conn:  # what an a4ac1e7 database looks like
+        conn.execute(text("DELETE FROM hams_cluster_meta"))
+        conn.execute(text("DELETE FROM hams_clusters"))
+        conn.execute(text("DELETE FROM places"))
+        conn.execute(text("DELETE FROM zip_anchors"))
+    assert uls.derived_tables_due() == (True, True, True)
+    from app.scheduler import start_uls_scheduler
 
-    # W1QQQ signed up earlier with a ZIP-centroid location; its profile still
-    # carries the FCC address, so the sync should snap it to street level
-    moved = sync_user_locations(db)
-    assert moved == 1
-    user = db.query(User).filter_by(callsign="W1QQQ").one()
-    assert user.lat == pytest.approx(41.71489, abs=1e-5)
-    assert user.lon == pytest.approx(-72.72687, abs=1e-5)
-
-
-def _token(client, db, callsign):
-    r = client.post("/api/auth/login", json={"callsign": callsign, "password": "password123"})
-    if r.status_code == 200:
-        return r.json()["token"]
-    return signup(client, callsign)["token"]
-
-
-def _seed_hams(db):
-    db.query(Ham).delete(synchronize_session=False)
-    recent = date.today().strftime("%m/%d/%Y")
-    db.add_all([
-        Ham(callsign="AA1A", lat=41.0, lon=-72.0, name="A", city="X", state="CT",
-            license_class="E", expires="01/01/2099", granted=recent),  # brand new
-        Ham(callsign="AA1B", lat=41.2, lon=-72.2, name="B", city="Y", state="CT",
-            license_class="T", expires="01/01/2099", granted="06/15/2010"),
-        Ham(callsign="AA1C", lat=35.0, lon=-100.0, name="C", city="Z", state="TX",
-            license_class="G", expires="01/01/2000", granted="06/15/1990"),  # grace period
-        Ham(callsign="NOLOC", lat=None, lon=None, name="N", city="?", state="??"),
-    ])
-    db.commit()
+    assert not get_settings().uls_import_enabled
+    assert start_uls_scheduler() is None  # imports off: a one-off thread builds them
+    import threading
+    for t in threading.enumerate():
+        if t.name == "uls-derived-tables":
+            t.join(60)
+    assert uls.derived_tables_due() == (False, False, False)
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT valid FROM hams_cluster_meta WHERE id = 1")).scalar() == 1
+        assert conn.execute(text("SELECT COUNT(*) FROM hams_clusters")).scalar() > 0
+        assert conn.execute(text("SELECT COUNT(*) FROM places")).scalar() == 4
+        assert conn.execute(text("SELECT COUNT(*) FROM zip_anchors")).scalar() == 4
 
 
-def test_hams_count_and_map(client, db):
-    _seed_hams(db)
-    tok = _token(client, db, "W1AAA")
-
-    r = client.get("/api/hams/count", headers=auth(tok))
-    assert r.status_code == 200
-    assert r.json()["count"] == 4
-
-    # close zoom -> individual hams, NOLOC excluded (no coordinates)
-    r = client.get("/api/hams/map?min_lat=40&max_lat=42&min_lon=-73&max_lon=-71&zoom=12",
-                   headers=auth(tok))
-    body = r.json()
-    assert body["type"] == "hams"
-    assert {h["callsign"] for h in body["hams"]} == {"AA1A", "AA1B"}
-    by_call = {h["callsign"]: h for h in body["hams"]}
-    assert by_call["AA1A"]["license_class"] == "E"
-    assert by_call["AA1A"]["expired"] is False
-    assert by_call["AA1A"]["new"] is True        # granted today
-    assert by_call["AA1B"]["new"] is False       # granted 2010
-
-    # the Texas ham is past its expiration date -> flagged expired
-    r = client.get("/api/hams/map?min_lat=34&max_lat=36&min_lon=-101&max_lon=-99&zoom=12",
-                   headers=auth(tok))
-    tx = r.json()["hams"][0]
-    assert tx["callsign"] == "AA1C"
-    assert tx["expired"] is True
-    assert tx["license_class"] == "G"
-
-    # wide zoom -> clusters with counts
-    r = client.get("/api/hams/map?min_lat=30&max_lat=45&min_lon=-105&max_lon=-70&zoom=4",
-                   headers=auth(tok))
-    body = r.json()
-    assert body["type"] == "clusters"
-    assert sum(c["count"] for c in body["cells"]) == 3
-
-    # bbox excludes the Texas ham
-    r = client.get("/api/hams/map?min_lat=40&max_lat=42&min_lon=-73&max_lon=-71&zoom=4",
-                   headers=auth(tok))
-    assert sum(c["count"] for c in r.json()["cells"]) == 2
+def test_an_old_aggregate_is_rebuilt(mini_uls_zip, db):
+    _clear_geocodes(db)
+    uls.import_hams(zip_path=mini_uls_zip)
+    assert uls.derived_tables_due() == (False, False, False)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE hams_cluster_meta SET built_on = '2000-01-01'"))
+    assert uls.derived_tables_due()[0] is True
+    assert uls.ensure_derived_tables() is True
+    assert uls.derived_tables_due() == (False, False, False)
 
 
-def test_ham_detail_privacy(client, db):
-    _seed_hams(db)
-    tok = _token(client, db, "W1BBB")
-    r = client.get("/api/hams/AA1A", headers=auth(tok))
-    assert r.status_code == 200
-    body = r.json()
-    assert body["callsign"] == "AA1A"
-    assert "email" not in body and "street" not in body
-    assert r.status_code == 200
-    assert client.get("/api/hams/ZZ9ZZ", headers=auth(tok)).status_code == 404
-    assert client.get("/api/hams/AA1A").status_code == 401  # auth required
+def test_members_who_edited_their_address_are_not_labelled_licence(db, monkeypatch):
+    """V3-F2 regression: older versions pinned every street-geocoded member
+    at their licence, whatever address they had entered; the migration then
+    labelled them 'licence' and they stayed there. They are left
+    unattributed and re-placed from their own profile."""
+    from app.integrations import geocode
+
+    monkeypatch.setattr(geocode, "geocode_address", lambda *a: None)
+    uls.migrate_hams_table()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM hams WHERE callsign IN ('AC0MKA', 'AC0MKB')"))
+        conn.execute(text("DELETE FROM users WHERE callsign IN ('AC0MKA', 'AC0MKB')"))
+        for call in ("AC0MKA", "AC0MKB"):
+            conn.execute(text(
+                "INSERT INTO hams (callsign, name, street, city, state, zip, lat, lon, loc_source)"
+                " VALUES (:c, 'X', '8100 WAYNE AVE', 'KANSAS CITY', 'MO', '64131', 38.981, -94.5694,"
+                " 'address')"), {"c": call})
+        conn.execute(text(
+            "INSERT INTO users (callsign, password_hash, name, email, address_line, city, state, zip,"
+            " grid, lat, lon, range_miles, created_at, map_precision)"
+            " VALUES ('AC0MKA', 'x', 'A', 'a@example.com', '8100 Wayne Ave', 'Kansas City', 'MO',"
+            " '64131', '', 38.981, -94.5694, 25, '2026-01-01', 'address'),"
+            " ('AC0MKB', 'x', 'B', 'b@example.com', '4500 Main St', 'Kansas City', 'MO', '64111',"
+            " 'EM29qa', 38.981, -94.5694, 25, '2026-01-01', 'address')"))
+        uls.guess_location_sources(conn)
+        got = dict(conn.execute(text("SELECT callsign, location_source FROM users"
+                                     " WHERE callsign IN ('AC0MKA', 'AC0MKB')")).all())
+    assert got == {"AC0MKA": "licence", "AC0MKB": None}  # old code: both 'licence'
+    assert geocode.place_mispinned_members(db, pause_s=0) == 1
+    b = db.query(User).filter_by(callsign="AC0MKB").one()
+    db.refresh(b)
+    assert b.location_source == "grid" and (b.lat, b.lon) != (38.981, -94.5694)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM hams WHERE callsign IN ('AC0MKA', 'AC0MKB')"))
+        conn.execute(text("DELETE FROM users WHERE callsign IN ('AC0MKA', 'AC0MKB')"))

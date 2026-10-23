@@ -1,0 +1,182 @@
+/* =====================================================================
+   hamdoor app-level CSS (shell builder). tokens.css and components.css are
+   exact copies of the locked design (design/final); this file holds only what
+   the running app adds on top: state glue for the chrome controller, small
+   view pieces the design names but components.css leaves to the app, and the
+   fixes listed below. Never redefine a token here.
+   ===================================================================== */
+
+/* ---------- shell ---------- */
+.hd-main:focus, .hd-main:focus-visible { outline: none; box-shadow: none; } /* focused only to move focus out of chrome or skip to content */
+.hd-view:focus { outline: none; }
+/* Sign up and Log in sit outside the signed-in shell: no rail, no tab bar (§7.14) */
+.hd-app[data-route="auth"] .hd-rail,
+.hd-app[data-route="auth"] .hd-tabbar { display: none; }
+.hd-tabbar__item > span:not(.hd-tabbar__call) { display: block; }
+.hd-rail__brand .hd-logo { display: block; }
+
+/* A map sheet is open (HD.chrome.setSheetOpen): on portrait phones the tab bar steps below the screen
+   like a tuck (it is never display:none); short phones keep their rail beside the side panel. */
+@media (max-width: 1023.98px) and (min-height: 500px) {
+  .hd-sheet-open .hd-app[data-route="map"] .hd-tabbar { transform: translateY(calc(100% + 2px)); pointer-events: none; }
+}
+
+/* Reduced motion (§5, §8.4): tucked chrome fades over 120 ms and showing is immediate.
+   components.css lets the tucked state's 0 ms tuck duration win the cascade, which made the fade instant. */
+@media (prefers-reduced-motion: reduce) {
+  :root :is(.hd-ah, [data-tuck]) { transition: none; }
+  html.hd-tucked :is(.hd-ah, [data-tuck]) { transition: opacity var(--hd-dur-fast) linear; }
+  @media (max-width: 1023.98px) and (min-height: 500px) {
+    .hd-sheet-open .hd-app[data-route="map"] .hd-tabbar { transform: none; opacity: 0; }
+  }
+}
+
+/* External links carry the external-link icon after the label, inline in the sentence (§7.2). components.css C.0 makes
+   every svg a block, which put the icon (and the sentence's full stop) on lines of their own. */
+.hd-link .hd-icon { display: inline-block; vertical-align: -2px; margin-left: 4px; }
+
+/* a link-styled button ("Change", "Not me"): the same ink 700 underline as .hd-link */
+button.hd-link { border: 0; padding: 0; background: none; font: inherit; font-weight: var(--hd-w-bold); color: var(--hd-ink); cursor: pointer; }
+
+/* Touch screens keep :hover after a tap ("sticky hover"), which left a wash on the last button pressed.
+   Without a hovering pointer, the hover washes go; the pressed (:active) state stays. */
+@media (hover: none) {
+  .hd-btn:hover { background: var(--hd-surface); }
+  .hd-btn--quiet:hover { background: transparent; }
+  .hd-btn--primary:hover { background: var(--hd-ink); border-color: var(--hd-ink); }
+  .hd-btn--primary:active { background: var(--hd-ink-85); border-color: var(--hd-ink-85); }
+  .hd-iconbtn:hover { background: transparent; }
+  .hd-iconbtn--wash:hover { background: var(--hd-fill-subtle); }
+  .hd-row:hover, a.hd-spot:hover, button.hd-spot:hover, .hd-xref:hover { background: var(--hd-surface); }
+  .hd-row:active, a.hd-spot:active, button.hd-spot:active, .hd-xref:active { background: var(--hd-fill-subtle); }
+  .hd-row--you:hover { background: var(--hd-red-12); }
+}
+
+/* ---------- toasts ---------- */
+.hd-toast--error .hd-icon { flex: none; }
+
+/* ---------- text that people write prints as written: keep their line breaks ---------- */
+.hd-post__body, .hd-comment__body { white-space: pre-line; overflow-wrap: anywhere; }
+.hd-post__title { overflow-wrap: anywhere; }
+
+/* ---------- feed ---------- */
+.hd-feedmore { display: grid; justify-items: center; gap: var(--hd-sp-3); padding: var(--hd-sp-5) var(--hd-gutter) var(--hd-sp-7); }
+.hd-feedend { padding: var(--hd-sp-6) var(--hd-gutter) var(--hd-sp-7); color: var(--hd-text-2); font-size: var(--hd-fs-16); text-align: center; }
+.hd-liststate { padding: var(--hd-sp-4) var(--hd-gutter); }
+.hd-liststate .hd-btn { margin-top: var(--hd-sp-4); }
+.hd-chip__x { margin: 0 -4px 0 -2px; }
+.hd-post[data-pending="true"] { display: none; }
+/* A post or a reply takes focus for a moment when the control you used leaves (Delete, Undo, Show older posts, closing
+   a thread). Its ring is the design's ring turned inward (3 px ink, 2 px gap), because a ledger line runs edge to edge. */
+.hd-post:focus-visible, .hd-comment:focus-visible { outline-offset: -5px; box-shadow: inset 0 0 0 2px var(--hd-focus-gap); }
+.hd-post__chips:empty, .hd-comment__chips:empty { display: none; }
+.hd-post__when > .hd-post__clock { display: inline-flex; align-items: center; gap: var(--hd-sp-3); margin-right: var(--hd-sp-3); }
+.hd-comment__own { grid-column: 1 / -1; justify-self: start; margin-left: calc(-1 * var(--hd-sp-4)); }
+.hd-comment[data-pending="true"] { display: none; }
+.hd-reply .hd-btn { flex: none; }
+/* Send pressed with nothing written: the error sits under the row (§7.3) */
+.hd-reply { flex-wrap: wrap; }
+.hd-reply > .hd-field__error { flex: 0 0 100%; }
+.hd-thread__actions { display: flex; align-items: center; gap: 4px; }
+.hd-aside__more { color: var(--hd-text-2); font-size: var(--hd-fs-14); }
+.hd-postbadge { display: block; flex: none; overflow: visible; }
+.hd-xref .hd-postbadge { width: 24px; height: 24px; }
+.hd-wall__post .hd-postbadge { width: 20px; height: 20px; }
+.hd-aside .hd-kv { font-size: 15px; }
+.hd-aside .hd-outlook th, .hd-aside .hd-outlook td { padding-left: 0; }
+.hd-aside .hd-readouts { padding: 0; }
+/* the desktop thread column (§7.15) */
+@media (min-width: 1024px) {
+  .hd-page__aside .hd-thread { position: relative; }
+  .hd-threadpage { display: none; }
+  /* The aside and the thread column stick just under the sticky title bar, never under it (§6.3, §7.15).
+     components.css sticks them at 104 px, but the Feed's bar is a title row plus a chip row, 136 px at the default
+     text size, so its head, "Show on map" and the close button slid 32 px under the bar on any scroll. hd-chrome.js
+     publishes the bar's measured height (--hd-topbar-full, on the bar's parent), so larger text keeps them clear too. */
+  .hd-page__aside { top: var(--hd-topbar-full, 136px); }
+  .hd-page__aside .hd-thread { max-height: calc(100vh - var(--hd-topbar-full, 136px) - var(--hd-sp-5)); }
+  /* An aside taller than the room under the bar (three nets on a 768 px laptop) scrolls inside itself, like the thread
+     column, so nothing in it is out of reach of the mouse or the keyboard; 8 px of padding keeps the focus rings of
+     its full-width rows inside the scroller. */
+  .hd-page__grid:not(.hd-page__grid--thread) > .hd-page__aside {
+    max-height: calc(100vh - var(--hd-topbar-full, 136px) - var(--hd-sp-5));
+    overflow-y: auto; padding: 0 8px 8px; margin: 0 -8px;
+  }
+}
+/* the phone thread page (§7.15) */
+.hd-threadpage .hd-post { border-bottom: 0; }
+.hd-threadpage .hd-topbar__row { gap: var(--hd-sp-3); }
+.hd-topbar__spacer { flex: 1; }
+
+/* ---------- composer (§7.6) ---------- */
+.hd-composer__body > .hd-alert { margin-bottom: var(--hd-sp-2); }
+/* phones and short phones: the full-height composer keeps its bar and fields clear of the side safe areas, like every
+   other surface (§6.2, §8.6); in landscape the notch and the rounded corners sit there */
+@media (max-width: 1023.98px) {
+  .hd-composer__bar, .hd-composer__body {
+    padding-left: calc(var(--hd-safe-left) + var(--hd-gutter));
+    padding-right: calc(var(--hd-safe-right) + var(--hd-gutter));
+  }
+}
+/* desktop: a modal <dialog> is position:fixed with inset-block 0, so components.css's height:auto stretched it
+   to its max-height; fit-content (the UA default it overrode) sizes it to its content and margin:auto centres it */
+@media (min-width: 1024px) { .hd-composer { height: fit-content; } }
+[data-cd-alert]:empty, [data-pw-alert]:empty, [data-del-alert]:empty, [data-profile-alert]:empty, [data-login-alert]:empty { display: none; }
+.hd-composer .hd-chips { row-gap: var(--hd-sp-3); }
+.hd-composer__bar .hd-btn--primary[aria-busy="true"] { cursor: progress; }
+.hd-field__label--sub { font-size: var(--hd-fs-14); font-weight: var(--hd-w-medium); color: var(--hd-text-2); }
+
+/* ---------- Nearby (§7.17) ---------- */
+.hd-wall { list-style: none; margin: 0; padding: 0; }
+.hd-wall > li { display: flex; }
+.hd-wall .hd-qsl { width: 100%; text-decoration: none; }
+.hd-qsl__line { margin-top: 2px; color: var(--hd-text-2); font-size: 15px; }
+.hd-qsl .hd-wall__name { margin-top: 2px; }
+.hd-nearby .hd-liststate, .hd-nearby .hd-empty { background: var(--hd-surface); }
+
+/* ---------- Activity (§7.12) ---------- */
+.hd-act__err { padding: var(--hd-sp-5) var(--hd-gutter); display: grid; gap: var(--hd-sp-4); justify-items: start; }
+/* spot rows with a place are links ("Show on map"): read as rows, not as underlined text */
+a.hd-spot { text-decoration: none; cursor: pointer; }
+a.hd-spot:hover { background: var(--hd-fill-subtle); }
+.hd-spot__call--you { color: var(--hd-member); }
+.hd-row .hd-mk-aprs { display: block; cursor: inherit; }
+.hd-row__lead .hd-mk-rpt__cap { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 5px; border-radius: var(--hd-r-mark); font: var(--hd-w-heavy) 13px/1 var(--hd-font); }
+.hd-row__f { font-size: var(--hd-fs-20); font-weight: var(--hd-w-heavy); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hd-row__tone { font-weight: var(--hd-w-medium); white-space: nowrap; }
+.hd-outlook td:first-child { white-space: nowrap; }
+.hd-outlook tbody th { padding: 10px var(--hd-gutter); border-top: 1px solid var(--hd-line); color: var(--hd-text); font-size: inherit; font-weight: var(--hd-w-bold); white-space: nowrap; }
+.hd-readout__v small { font-size: var(--hd-fs-16); }
+.hd-ctlrow .hd-field__label { font-size: 15px; }
+/* the tab row's overflow cue sits at the cut edge (§7.4, §7.12): components.css C.25 draws the right-hand one; this is
+   its mirror for a row scrolled to a later tab, so a tab cut on the left ("nds" of Bands at 320 px) is never a surprise */
+.hd-tabsbox[data-less="true"]::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 1px; z-index: 1; width: 48px; pointer-events: none;
+  background: linear-gradient(to left, transparent, var(--hd-surface) 60%);
+}
+.hd-tabsbox__less { display: none; }
+.hd-tabsbox[data-less="true"] .hd-tabsbox__less { display: block; position: absolute; left: 6px; top: 50%; margin-top: -10px; z-index: 2; color: var(--hd-ink); pointer-events: none; }
+@media (min-width: 1024px) { .hd-tabsbox[data-less="true"]::before { background: linear-gradient(to left, transparent, var(--hd-bg) 60%); } }
+.hd-act__empty .hd-empty { padding-top: var(--hd-sp-7); }
+
+/* ---------- You (§7.13) ---------- */
+.hd-you { padding: var(--hd-sp-5) var(--hd-gutter) var(--hd-sp-8); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--hd-sp-7); }
+.hd-qsl__head .hd-call--hero { flex: 1; min-width: 0; }
+/* a callsign is never wrapped or cut: on the narrowest phones the hero signature scales down to fit its card */
+@media (max-width: 389.98px) { .hd-qsl .hd-call--hero { font-size: clamp(var(--hd-fs-31), 13.2vw, var(--hd-fs-call-hero)); } }
+.hd-rangehead { display: flex; justify-content: space-between; align-items: baseline; gap: var(--hd-sp-4); }
+.hd-rangehead .hd-section__h label { cursor: pointer; }
+.hd-rangeval { font-weight: var(--hd-w-heavy); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hd-danger { display: grid; gap: var(--hd-sp-3); justify-items: start; }
+.hd-danger .hd-field__hint { max-width: var(--hd-measure); }
+.hd-pinnow[hidden] { display: none; }
+.hd-form .hd-alert { margin-bottom: var(--hd-sp-2); }
+
+/* ---------- Sign up and Log in (§7.14) ---------- */
+.hd-auth__notice { display: flex; gap: var(--hd-sp-3); align-items: flex-start; padding: var(--hd-sp-4) var(--hd-sp-5); border: 2px solid var(--hd-ink); border-radius: var(--hd-r-control); font-weight: var(--hd-w-bold); }
+.hd-auth__notice .hd-icon { flex: none; margin-top: 1px; }
+.hd-auth__found b { font-weight: var(--hd-w-heavy); }
+.hd-auth p { max-width: var(--hd-measure); }
+.hd-auth .hd-alert__body .hd-link { white-space: nowrap; }
+.hd-inputrow > .hd-btn { flex: none; min-height: 64px; }
+.hd-auth__lookupwait { color: var(--hd-text-2); font-size: var(--hd-fs-14); }

@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 .env
 *.db
+secret_key
+*.db-wal
+*.db-shm

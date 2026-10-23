@@ -19,6 +19,10 @@ class CallsignRecord:
     license_class: str = ""
     expires: str = ""
     source: str = ""
+    # geocoded coordinates of the license address when the provider has
+    # them (callook: Bing, ~10 m) — better than the grid-square centre
+    lat: float | None = None
+    lon: float | None = None
     extra: dict = field(default_factory=dict)
 
 

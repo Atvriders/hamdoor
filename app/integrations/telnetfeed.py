@@ -15,6 +15,7 @@ import socket
 import time
 
 from app.config import get_settings
+from app.integrations.common import UpstreamError
 
 log = logging.getLogger(__name__)
 
@@ -47,11 +48,18 @@ def sample_telnet_feed(host: str, port: int, callsign: str,
                        seconds: float, max_spots: int = 200,
                        post_login_cmds: tuple = ()) -> list[dict]:
     """Connect, log in, optionally send setup commands, and collect parsed
-    spot lines for `seconds`."""
+    spot lines for `seconds`.
+
+    Raises UpstreamError when the node failed us without a single spot: no
+    connection, a connection error, the node hanging up before the sample
+    ended, or not one byte in the whole sample. Spots heard before a failure
+    are returned (that is what the node sent); [] means the node stayed
+    connected and spotted nothing."""
     deadline = time.monotonic() + seconds
     spots: list[dict] = []
     buf = b""
     logged_in = False
+    received = hung_up = False
     try:
         with socket.create_connection((host, port), timeout=8) as sock:
             sock.settimeout(2.0)
@@ -61,7 +69,9 @@ def sample_telnet_feed(host: str, port: int, callsign: str,
                 except socket.timeout:
                     continue
                 if not chunk:
+                    hung_up = True
                     break
+                received = True
                 buf += chunk
                 # the login prompt often arrives without a trailing newline —
                 # watch the raw buffer, not just split lines
@@ -81,7 +91,14 @@ def sample_telnet_feed(host: str, port: int, callsign: str,
                     if spot:
                         spots.append(spot)
     except OSError as exc:
-        log.warning("telnet feed %s:%s failed: %s", host, port, exc)
+        log.warning("[activity] telnet feed %s:%s failed: %s", host, port, exc)
+        if not spots:
+            raise UpstreamError(f"{host}:{port}: {type(exc).__name__}") from None
+        return spots
+    if not spots and (hung_up or not received):
+        log.warning("[activity] telnet feed %s:%s %s", host, port,
+                    "hung up before the sample ended" if hung_up else "sent nothing")
+        raise UpstreamError(f"{host}:{port}: {'hung up' if hung_up else 'silent'}")
     return spots
 
 

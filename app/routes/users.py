@@ -1,15 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.integrations.geocode import resolve_user_location
+from app.integrations.geocode import resolve_user_location_source, shows_exact_location, sync_post_locations
 from app.integrations.provider import CallsignProvider, get_provider
-from app.models import User
+from app.models import Comment, Post, User
 from app.routes.auth import user_self
-from app.schemas import PasswordChange, UserSelf, UserUpdate
-from app.security import get_current_user, hash_password, verify_password
+from app.schemas import AccountDelete, PasswordChange, TokenResponse, UserSelf, UserUpdate
+from app.security import create_token, get_current_user, hash_password, verify_password
 
 router = APIRouter(prefix="/api/me", tags=["users"])
+
+
+def _place(db: Session, user: User, record=None) -> None:
+    """Re-resolve the user's stored location (and where it came from)."""
+    placed = resolve_user_location_source(db, user.callsign, user.grid, user.address_line,
+                                          user.city, user.state, user.zip, record=record)
+    user.lat, user.lon, user.location_source = placed if placed else (None, None, None)
 
 
 @router.get("", response_model=UserSelf)
@@ -23,27 +31,55 @@ def update_me(body: UserUpdate, user: User = Depends(get_current_user), db: Sess
     address_touched = any(
         k in updates for k in ("address_line", "city", "state", "zip", "grid")
     )
+    precision_before = shows_exact_location(user)
     for key, value in updates.items():
         setattr(user, key, value.strip() if isinstance(value, str) else value)
     if address_touched:
-        latlon = resolve_user_location(db, user.callsign, user.grid, user.address_line,
-                                       user.city, user.state, user.zip)
-        user.lat, user.lon = (latlon if latlon else (None, None))
+        _place(db, user)
+    # posts follow the precision and the point (see sync_post_locations):
+    # switching to 'grid' moves every post to the subsquare centre, switching
+    # back restores the precise point, a 'grid' member's posts follow their
+    # shown point when it moves, and an 'address' member's posts with no
+    # location get theirs once the member has one again
+    sync_post_locations(db, user, restore=shows_exact_location(user) and not precision_before)
     db.commit()
     db.refresh(user)
     return user_self(user)
 
 
-@router.post("/password", status_code=204)
+@router.delete("", status_code=204)
+def delete_me(body: AccountDelete, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete the account: the member's comments, their posts (with every
+    comment on them) and the member. Their FCC directory entry is public
+    record and stays. Needs the current password."""
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(400, "password is incorrect")
+    uid = user.id
+    own_posts = select(Post.id).where(Post.author_id == uid)
+    db.execute(delete(Comment).where(or_(Comment.author_id == uid, Comment.post_id.in_(own_posts)))
+               .execution_options(synchronize_session=False))
+    db.execute(delete(Post).where(Post.author_id == uid).execution_options(synchronize_session=False))
+    db.execute(delete(User).where(User.id == uid).execution_options(synchronize_session=False))
+    db.commit()
+    db.expunge(user)
+    return Response(status_code=204)
+
+
+@router.post("/password", response_model=TokenResponse)
 def change_password(
     body: PasswordChange,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Every token carries a fingerprint of the password it was issued
+    under, so changing it ends every other session (a stolen token stops
+    working); the session that made the change gets a fresh token here."""
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(400, "current password is incorrect")
     user.password_hash = hash_password(body.new_password)
     db.commit()
+    db.refresh(user)
+    return TokenResponse(token=create_token(user), user=user_self(user))
 
 
 @router.post("/refresh-callsign", response_model=UserSelf)
@@ -62,38 +98,19 @@ def refresh_callsign(
     user.state = record.state or user.state
     user.zip = record.zip or user.zip
     user.grid = record.grid or user.grid
-    latlon = resolve_user_location(db, user.callsign, user.grid, user.address_line,
-                                   user.city, user.state, user.zip)
-    user.lat, user.lon = (latlon if latlon else (None, None))
+    _place(db, user, record=record)
+    # a 'grid' member's posts follow their shown point; an 'address' member's
+    # posts with no location get the new point
+    sync_post_locations(db, user)
     db.commit()
     db.refresh(user)
     return user_self(user)
 
 
 def sync_user_locations(db: Session) -> int:
-    """Snap registered users' locations to their street-level FCC geocode,
-    but only when their profile still carries the FCC address (a user-edited
-    address is respected). Returns how many users were moved."""
-    import logging
+    """Re-place registered users from the directory (street pins, fixed
+    joins). Runs at startup and after every ULS import; the logic lives in
+    app.integrations.geocode so the importer can call it too."""
+    from app.integrations.geocode import sync_user_locations as _sync
 
-    from app.models import Ham
-
-    log = logging.getLogger("app.routes.users")
-    moved = 0
-    try:
-        for u in db.query(User).all():
-            ham = db.get(Ham, u.callsign)
-            if not ham or ham.lat is None or ham.loc_source != "address":
-                continue
-            if (u.address_line or "").strip().upper() != (ham.street or "").strip().upper():
-                continue  # user edited their address — leave their location alone
-            if (u.lat, u.lon) != (ham.lat, ham.lon):
-                u.lat, u.lon = ham.lat, ham.lon
-                moved += 1
-        if moved:
-            db.commit()
-            log.info("[uls] snapped %d user location(s) to street-level geocodes", moved)
-    except Exception:
-        db.rollback()
-        log.warning("[uls] user location sync skipped", exc_info=True)
-    return moved
+    return _sync(db)

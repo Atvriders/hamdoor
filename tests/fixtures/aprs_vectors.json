@@ -1,0 +1,2402 @@
+[
+ {
+  "id": "v01_mice_moving_backtick",
+  "category": "mice_moving_backtick",
+  "note": "Mic-E current GPS, moving: speed/course from SP/DC/SE bytes",
+  "source_capture": "na480",
+  "raw": "Q1ABF-9>TP3Y1R,qAR,QA1I:`fJiprgv/`\"4^}_4",
+  "raw_b64": "UTFBQkYtOT5UUDNZMVIscUFSLFFBMUk6YGZKaXByZ3YvYCI0Xn1fNA==",
+  "expected": {
+   "from": "Q1ABF-9",
+   "type": "mic-e",
+   "lat": 40.652,
+   "lon": -74.7795,
+   "symbol_table": "/",
+   "symbol_code": "v",
+   "course": 275,
+   "speed_kmh": 88.896,
+   "altitude_m": 71.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "`_4"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA1I"
+  },
+  "ref": {
+   "from": "Q1ABF-9",
+   "format": "mic-e",
+   "lat": 40.652,
+   "lon": -74.7795,
+   "symbol_table": "/",
+   "symbol_code": "v",
+   "course": 275,
+   "speed_kmh": 88.896,
+   "altitude_m": 71,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`_4"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FTM-500D",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`_4'); per aprs-deviceid mic-e tables the clean comment is '', device=Yaesu FTM-500D"
+  ]
+ },
+ {
+  "id": "v02_mice_moving_backtick",
+  "category": "mice_moving_backtick",
+  "note": "Mic-E current GPS, moving: speed/course from SP/DC/SE bytes",
+  "source_capture": "na480",
+  "raw": "Q4ABM-9>SPSP0Q,qAR,QA4B:`p*rm+5k/`\"4^}_4",
+  "raw_b64": "UTRBQk0tOT5TUFNQMFEscUFSLFFBNEI6YHAqcm0rNWsvYCI0Xn1fNA==",
+  "expected": {
+   "from": "Q4ABM-9",
+   "type": "mic-e",
+   "lat": 30.500167,
+   "lon": -84.247667,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": 125,
+   "speed_kmh": 20.372,
+   "altitude_m": 71.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "`_4"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M0: Off Duty",
+   "mbits": "111",
+   "via": "QA4B"
+  },
+  "ref": {
+   "from": "Q4ABM-9",
+   "format": "mic-e",
+   "lat": 30.500167,
+   "lon": -84.247667,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": 125,
+   "speed_kmh": 20.372,
+   "altitude_m": 71,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`_4"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FTM-500D",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`_4'); per aprs-deviceid mic-e tables the clean comment is '', device=Yaesu FTM-500D"
+  ]
+ },
+ {
+  "id": "v03_mice_apostrophe",
+  "category": "mice_apostrophe",
+  "note": "Mic-E with ' DTI (old GPS data / TM-D700 current)",
+  "source_capture": "na480",
+  "raw": "Q4ACO-2>S5PX4T,TCPIP*,qAC,Q2AL:'q'5l  -/'\"6Q}|4",
+  "raw_b64": "UTRBQ08tMj5TNVBYNFQsVENQSVAqLHFBQyxRMkFMOidxJzVsICAtLyciNlF9fDQ=",
+  "expected": {
+   "from": "Q4ACO-2",
+   "type": "mic-e",
+   "lat": 35.140667,
+   "lon": -85.1875,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 4,
+   "speed_kmh": 0.0,
+   "altitude_m": 240.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "'|4"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M2: In Service",
+   "mbits": "101",
+   "via": "Q2AL"
+  },
+  "ref": {
+   "from": "Q4ACO-2",
+   "format": "mic-e",
+   "lat": 35.140667,
+   "lon": -85.1875,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 4,
+   "speed_kmh": 0.0,
+   "altitude_m": 240,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "'|4"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": false,
+   "mice_device": "Byonics TinyTrak4",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment (\"'|4\"); per aprs-deviceid mic-e tables the clean comment is '', device=Byonics TinyTrak4"
+  ]
+ },
+ {
+  "id": "v04_mice_altitude_start",
+  "category": "mice_altitude_start",
+  "note": "Mic-E altitude xxx} at start of status text (after type byte)",
+  "source_capture": "na480",
+  "raw": "Q2AAJ>S9UW2S,qAR,Q2ACK:`fPfl\"_>/>\"4M}=",
+  "raw_b64": "UTJBQUo+UzlVVzJTLHFBUixRMkFDSzpgZlBmbCJfPi8+IjRNfT0=",
+  "expected": {
+   "from": "Q2AAJ",
+   "type": "mic-e",
+   "lat": 39.953833,
+   "lon": -74.879,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 267,
+   "speed_kmh": 0.0,
+   "altitude_m": 54.0,
+   "object_name": null,
+   "alive": null,
+   "comment": ">="
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M2: In Service",
+   "mbits": "101",
+   "via": "Q2ACK"
+  },
+  "ref": {
+   "from": "Q2AAJ",
+   "format": "mic-e",
+   "lat": 39.953833,
+   "lon": -74.879,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 267,
+   "speed_kmh": 0.0,
+   "altitude_m": 54,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ">="
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Kenwood TH-D72",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('>='); per aprs-deviceid mic-e tables the clean comment is '', device=Kenwood TH-D72"
+  ]
+ },
+ {
+  "id": "v05_mice_altitude_end",
+  "category": "mice_altitude_end",
+  "note": "Mic-E altitude xxx} appended at END of comment (e.g. Winlink APMAIL)",
+  "source_capture": "na480",
+  "raw": "QA2AL-5>SW4UPX,WIDE1-1,WIDE2-1,qAO,QA6AO-1:`1_uo5bk\\14.37V\"4-}",
+  "raw_b64": "UUEyQUwtNT5TVzRVUFgsV0lERTEtMSxXSURFMi0xLHFBTyxRQTZBTy0xOmAxX3VvNWJrXDE0LjM3ViI0LX0=",
+  "expected": {
+   "from": "QA2AL-5",
+   "type": "mic-e",
+   "lat": 37.751333,
+   "lon": -121.1315,
+   "symbol_table": "\\",
+   "symbol_code": "k",
+   "course": 170,
+   "speed_kmh": 59.264,
+   "altitude_m": 22.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "14.37V"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA6AO-1"
+  },
+  "ref": {
+   "from": "QA2AL-5",
+   "format": "mic-e",
+   "lat": 37.751333,
+   "lon": -121.1315,
+   "symbol_table": "\\",
+   "symbol_code": "k",
+   "course": 170,
+   "speed_kmh": 59.264,
+   "altitude_m": 22,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "14.37V"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": null,
+   "mice_device": null,
+   "comment": "14.37V"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v06_mice_dao",
+  "category": "mice_dao",
+  "note": "Mic-E with !w..! / !W..! DAO precision extension",
+  "source_capture": "na480",
+  "raw": "QA7ACX-9>U8TXTX,WIDE2-2,qAR,QA7ACX-10:`2D9l\"0k/'\"8G}!wO!!|3",
+  "raw_b64": "UUE3QUNYLTk+VThUWFRYLFdJREUyLTIscUFSLFFBN0FDWC0xMDpgMkQ5bCIway8nIjhHfSF3TyEhfDM=",
+  "expected": {
+   "from": "QA7ACX-9",
+   "type": "mic-e",
+   "lat": 58.808084,
+   "lon": -122.6715,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": 220,
+   "speed_kmh": 0.0,
+   "altitude_m": 412.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "'|3"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "daodatumbyte": "W",
+   "mtype": "M2: In Service",
+   "mbits": "101",
+   "via": "QA7ACX-10"
+  },
+  "ref": {
+   "from": "QA7ACX-9",
+   "format": "mic-e",
+   "lat": 58.808084,
+   "lon": -122.6715,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": 220,
+   "speed_kmh": 0.0,
+   "altitude_m": 412,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": "wO!",
+   "comment": "'|3"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": false,
+   "mice_device": "Byonics TinyTrak3",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment (\"'|3\"); per aprs-deviceid mic-e tables the clean comment is '', device=Byonics TinyTrak3"
+  ]
+ },
+ {
+  "id": "v07_mice_south_east",
+  "category": "mice_south_east",
+  "note": "Mic-E southern + eastern hemisphere, longitude 100-179 (offset +100 bit)",
+  "source_capture": "south120",
+  "raw": "QA3BC-9>SX09U5,WIDE1-1,WIDE2-1,qAR,QA3ADG-1:'J5Bmq!>/]\"4k}=",
+  "raw_b64": "UUEzQkMtOT5TWDA5VTUsV0lERTEtMSxXSURFMi0xLHFBUixRQTNBREctMTonSjVCbXEhPi9dIjRrfT0=",
+  "expected": {
+   "from": "QA3BC-9",
+   "type": "mic-e",
+   "lat": -38.159167,
+   "lon": 146.423,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 105,
+   "speed_kmh": 33.336,
+   "altitude_m": 84.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "]="
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA3ADG-1"
+  },
+  "ref": {
+   "from": "QA3BC-9",
+   "format": "mic-e",
+   "lat": -38.159167,
+   "lon": 146.423,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 105,
+   "speed_kmh": 33.336,
+   "altitude_m": 84,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "]="
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Kenwood TM-D710",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment (']='); per aprs-deviceid mic-e tables the clean comment is '', device=Kenwood TM-D710"
+  ]
+ },
+ {
+  "id": "v08_mice_south_west",
+  "category": "mice_south_west",
+  "note": "Mic-E southern + western hemisphere (S/W bits), moving",
+  "source_capture": "south120",
+  "raw": "QA8ACI-9>ST424P,qAO,QA1ACH-10:`V1kl4?>/`\"4-}_4",
+  "raw_b64": "UUE4QUNJLTk+U1Q0MjRQLHFBTyxRQTFBQ0gtMTA6YFYxa2w0Pz4vYCI0LX1fNA==",
+  "expected": {
+   "from": "QA8ACI-9",
+   "type": "mic-e",
+   "lat": -34.706667,
+   "lon": -58.363167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 35,
+   "speed_kmh": 3.704,
+   "altitude_m": 22.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "`_4"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA1ACH-10"
+  },
+  "ref": {
+   "from": "QA8ACI-9",
+   "format": "mic-e",
+   "lat": -34.706667,
+   "lon": -58.363167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 35,
+   "speed_kmh": 3.704,
+   "altitude_m": 22,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`_4"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FTM-500D",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`_4'); per aprs-deviceid mic-e tables the clean comment is '', device=Yaesu FTM-500D"
+  ]
+ },
+ {
+  "id": "v09_mice_japan_110_179",
+  "category": "mice_japan_110_179",
+  "note": "Mic-E northern/eastern, longitude 110-179 (offset +100, d+28 in 38-127)",
+  "source_capture": "asia90",
+  "raw": "QA1AAD>SUSVT8,WIDE1-1,qAO,QA1AAF-10:`C97l-2-/`\"2U}_(",
+  "raw_b64": "UUExQUFEPlNVU1ZUOCxXSURFMS0xLHFBTyxRQTFBQUYtMTA6YEM5N2wtMi0vYCIyVX1fKA==",
+  "expected": {
+   "from": "QA1AAD",
+   "type": "mic-e",
+   "lat": 35.608,
+   "lon": 139.487833,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 322,
+   "speed_kmh": 1.852,
+   "altitude_m": -120.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "`_("
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M0: Off Duty",
+   "mbits": "111",
+   "via": "QA1AAF-10"
+  },
+  "ref": {
+   "from": "QA1AAD",
+   "format": "mic-e",
+   "lat": 35.608,
+   "lon": 139.487833,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 322,
+   "speed_kmh": 1.852,
+   "altitude_m": -120,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`_("
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FT2D",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`_('); per aprs-deviceid mic-e tables the clean comment is '', device=Yaesu FT2D"
+  ]
+ },
+ {
+  "id": "v10_mice_east_0_9",
+  "category": "mice_east_0_9",
+  "note": "Mic-E eastern longitude 0-9 deg: offset bit set, d+28 in 118-127 range",
+  "source_capture": "sydfra60",
+  "raw": "QA2AAC>UP0QW8,WIDE1-1,qAO,QA7AG:`~E[l \u001c-/`_%",
+  "raw_b64": "UUEyQUFDPlVQMFFXOCxXSURFMS0xLHFBTyxRQTdBRzpgfkVbbCAcLS9gXyU=",
+  "expected": {
+   "from": "QA2AAC",
+   "type": "mic-e",
+   "lat": 50.029667,
+   "lon": 8.693833,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 0,
+   "speed_kmh": 0.0,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "`_%"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA7AG"
+  },
+  "ref": {
+   "from": "QA2AAC",
+   "format": "mic-e",
+   "lat": 50.029667,
+   "lon": 8.693833,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": 0,
+   "speed_kmh": 0.0,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`_%"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FTM-400DR",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`_%'); per aprs-deviceid mic-e tables the clean comment is '', device=Yaesu FTM-400DR"
+  ]
+ },
+ {
+  "id": "v11_mice_east_10_99",
+  "category": "mice_east_10_99",
+  "note": "Mic-E eastern longitude 10-99 deg",
+  "source_capture": "sydfra60",
+  "raw": "QA1AAB-9>UQ3X59,qAR,QA0AAA-10:`&/sngY>/`\"6M}Achim on Tour_%",
+  "raw_b64": "UUExQUFCLTk+VVEzWDU5LHFBUixRQTBBQUEtMTA6YCYvc25nWT4vYCI2TX1BY2hpbSBvbiBUb3VyXyU=",
+  "expected": {
+   "from": "QA1AAB-9",
+   "type": "mic-e",
+   "lat": 51.643167,
+   "lon": 10.331167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 161,
+   "speed_kmh": 50.004,
+   "altitude_m": 236.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "`Achim on Tour_%"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "mtype": "M1: En Route",
+   "mbits": "110",
+   "via": "QA0AAA-10"
+  },
+  "ref": {
+   "from": "QA1AAB-9",
+   "format": "mic-e",
+   "lat": 51.643167,
+   "lon": 10.331167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 161,
+   "speed_kmh": 50.004,
+   "altitude_m": 236,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "`Achim on Tour_%"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Yaesu FTM-400DR",
+   "comment": "Achim on Tour"
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment ('`Achim on Tour_%'); per aprs-deviceid mic-e tables the clean comment is 'Achim on Tour', device=Yaesu FTM-400DR"
+  ]
+ },
+ {
+  "id": "v12_mice_ambiguity",
+  "category": "mice_ambiguity",
+  "note": "Mic-E with position ambiguity (K/L/Z in destination)",
+  "source_capture": "asia90",
+  "raw": "QA1AAG-9>S6PTYL,QA1AAE-2*,qAR,QA1AAH-10:`CJ(nU?>/]&",
+  "raw_b64": "UUExQUFHLTk+UzZQVFlMLFFBMUFBRS0yKixxQVIsUUExQUFILTEwOmBDSihuVT8+L10m",
+  "expected": {
+   "from": "QA1AAG-9",
+   "type": "mic-e",
+   "lat": 36.0825,
+   "lon": 139.769167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 335,
+   "speed_kmh": 46.3,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "]&"
+  },
+  "aprslib_extra": {
+   "posambiguity": 1,
+   "mtype": "M2: In Service",
+   "mbits": "101",
+   "via": "QA1AAH-10"
+  },
+  "ref": {
+   "from": "QA1AAG-9",
+   "format": "mic-e",
+   "lat": 36.0825,
+   "lon": 139.769167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 335,
+   "speed_kmh": 46.3,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 1,
+   "dao": null,
+   "comment": "]&"
+  },
+  "expected_spec": {
+   "mice_messaging_capable": true,
+   "mice_device": "Kenwood TM-D700",
+   "comment": "&"
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment (']&'); per aprs-deviceid mic-e tables the clean comment is '&', device=Kenwood TM-D700"
+  ]
+ },
+ {
+  "id": "v13_mice_telemetry",
+  "category": "mice_telemetry",
+  "note": "Mic-E with telemetry bytes",
+  "source_capture": "na90",
+  "raw": "Q7ACR-14>T6QUYU,WIDE1-1,qAR,QA2BE:`/\\Ul\"8u/'\"5C}|!$&<'c|!wc?!|3",
+  "raw_b64": "UTdBQ1ItMTQ+VDZRVVlVLFdJREUxLTEscUFSLFFBMkJFOmAvXFVsIjh1LyciNUN9fCEkJjwnY3whd2M/IXwz",
+  "expected": {
+   "from": "Q7ACR-14",
+   "type": "mic-e",
+   "lat": 46.265954,
+   "lon": -119.076222,
+   "symbol_table": "/",
+   "symbol_code": "u",
+   "course": 228,
+   "speed_kmh": 0.0,
+   "altitude_m": 135.0,
+   "object_name": null,
+   "alive": null,
+   "comment": "'|3"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "daodatumbyte": "W",
+   "mtype": "M2: In Service",
+   "mbits": "101",
+   "telemetry": {
+    "seq": 3,
+    "vals": [
+     482,
+     612,
+     0,
+     0,
+     0
+    ],
+    "bits": "00000000"
+   },
+   "via": "QA2BE"
+  },
+  "ref": {
+   "from": "Q7ACR-14",
+   "format": "mic-e",
+   "lat": 46.265954,
+   "lon": -119.076222,
+   "symbol_table": "/",
+   "symbol_code": "u",
+   "course": 228,
+   "speed_kmh": 0.0,
+   "altitude_m": 135,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": "wc?",
+   "comment": "'|!$&<'c||3"
+  },
+  "expected_spec": {
+   "comment_telemetry": "|!$&<'c|",
+   "mice_messaging_capable": false,
+   "mice_device": "Byonics TinyTrak3",
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib leaves Mic-E type/device bytes in the comment (\"'|3\"); per aprs-deviceid mic-e tables the clean comment is '', device=Byonics TinyTrak3"
+  ]
+ },
+ {
+  "id": "v14_compressed_course_speed",
+  "category": "compressed_course_speed",
+  "note": "compressed position with cs = course/speed",
+  "source_capture": "sydfra60",
+  "raw": "QA2ADE-12>APDW19,WIDE1-1,qAO,QA2BB:!/_53\\s_6vR:EG",
+  "raw_b64": "UUEyQURFLTEyPkFQRFcxOSxXSURFMS0xLHFBTyxRQTJCQjohL181M1xzXzZ2UjpFRw==",
+  "expected": {
+   "from": "QA2ADE-12",
+   "type": "compressed",
+   "lat": -33.091411,
+   "lon": 147.140915,
+   "symbol_table": "/",
+   "symbol_code": "R",
+   "course": 100,
+   "speed_kmh": 27.721,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": false,
+   "via": "QA2BB"
+  },
+  "ref": {
+   "from": "QA2ADE-12",
+   "format": "compressed",
+   "lat": -33.091411,
+   "lon": 147.140915,
+   "symbol_table": "/",
+   "symbol_code": "R",
+   "course": 100,
+   "speed_kmh": 27.721,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v15_compressed_course_speed",
+  "category": "compressed_course_speed",
+  "note": "compressed position with cs = course/speed",
+  "source_capture": "na480",
+  "raw": "Q6ABQ-7>APDR17,WIDE1-1,WIDE2-1,qAR,Q7AX-4:=/7^2&/OY#EgL[/A=000302",
+  "raw_b64": "UTZBQlEtNz5BUERSMTcsV0lERTEtMSxXSURFMi0xLHFBUixRN0FYLTQ6PS83XjImL09ZI0VnTFsvQT0wMDAzMDI=",
+  "expected": {
+   "from": "Q6ABQ-7",
+   "type": "compressed",
+   "lat": 45.1481,
+   "lon": -122.581929,
+   "symbol_table": "/",
+   "symbol_code": "E",
+   "course": 280,
+   "speed_kmh": 48.831,
+   "altitude_m": 92.05,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": true,
+   "via": "Q7AX-4"
+  },
+  "ref": {
+   "from": "Q6ABQ-7",
+   "format": "compressed",
+   "lat": 45.1481,
+   "lon": -122.581929,
+   "symbol_table": "/",
+   "symbol_code": "E",
+   "course": 280,
+   "speed_kmh": 48.831,
+   "altitude_m": 92.05,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v16_compressed_altitude",
+  "category": "compressed_altitude",
+  "note": "compressed position with cs = altitude (T byte GGA)",
+  "source_capture": "na480",
+  "raw": "Q3AAL-9>APLRT1,WIDE1-1,qAO,Q3AAL:=/:4K@;J\\;k?HQ",
+  "raw_b64": "UTNBQUwtOT5BUExSVDEsV0lERTEtMSxxQU8sUTNBQUw6PS86NEtAO0pcO2s/SFE=",
+  "expected": {
+   "from": "Q3AAL-9",
+   "type": "compressed",
+   "lat": 40.12032,
+   "lon": -75.3195,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 77.04,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": true,
+   "via": "Q3AAL"
+  },
+  "ref": {
+   "from": "Q3AAL-9",
+   "format": "compressed",
+   "lat": 40.12032,
+   "lon": -75.3195,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 77.04,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v17_compressed_range",
+  "category": "compressed_range",
+  "note": "compressed position with cs = pre-calculated radio range",
+  "source_capture": "na480",
+  "raw": "Q7ABU-10>APDW17,TCPIP*,qAC,Q2AL:!S<r`/3O*\\#{.GLos Lunas NM ",
+  "raw_b64": "UTdBQlUtMTA+QVBEVzE3LFRDUElQKixxQUMsUTJBTDohUzxyYC8zTypcI3suR0xvcyBMdW5hcyBOTSA=",
+  "expected": {
+   "from": "Q7ABU-10",
+   "type": "compressed",
+   "lat": 34.811,
+   "lon": -106.777999,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "Los Lunas NM"
+  },
+  "aprslib_extra": {
+   "messagecapable": false,
+   "radiorange": 8.75362025192096,
+   "via": "Q2AL"
+  },
+  "ref": {
+   "from": "Q7ABU-10",
+   "format": "compressed",
+   "lat": 34.811,
+   "lon": -106.777999,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "Los Lunas NM"
+  },
+  "expected_spec": {
+   "symbol_overlay": "S",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v18_compressed_no_cs",
+  "category": "compressed_no_cs",
+  "note": "compressed position, c=space (no course/speed/range)",
+  "source_capture": "na480",
+  "raw": "CRAIG-1>APDW19,qAR,CEDAR:!T:#\\I3=9g&  !",
+  "raw_b64": "Q1JBSUctMT5BUERXMTkscUFSLENFREFSOiFUOiNcSTM9OWcmICAh",
+  "expected": {
+   "from": "CRAIG-1",
+   "type": "compressed",
+   "lat": 40.4858,
+   "lon": -107.553383,
+   "symbol_table": "T",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": false,
+   "gpsfixstatus": 0,
+   "via": "CEDAR"
+  },
+  "ref": {
+   "from": "CRAIG-1",
+   "format": "compressed",
+   "lat": 40.4858,
+   "lon": -107.553383,
+   "symbol_table": "T",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "symbol_overlay": "T",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v19_compressed_overlay_a_j",
+  "category": "compressed_overlay_a_j",
+  "note": "compressed overlay a-j (means overlay digit 0-9)",
+  "source_capture": "na90",
+  "raw": "QA6AP-6>APDW19,TCPIP*,qAC,Q2ACB:!g;/+Y/ls]#  !|#-#7%7)N*p!M|",
+  "raw_b64": "UUE2QVAtNj5BUERXMTksVENQSVAqLHFBQyxRMkFDQjohZzsvK1kvbHNdIyAgIXwjLSM3JTcpTipwIU18",
+  "expected": {
+   "from": "QA6AP-6",
+   "type": "compressed",
+   "lat": 38.258334,
+   "lon": -121.308333,
+   "symbol_table": "g",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": false,
+   "telemetry": {
+    "seq": 194,
+    "vals": [
+     204,
+     386,
+     773,
+     898,
+     44
+    ],
+    "bits": "00000000"
+   },
+   "gpsfixstatus": 0,
+   "via": "Q2ACB"
+  },
+  "ref": {
+   "from": "QA6AP-6",
+   "format": "compressed",
+   "lat": 38.258334,
+   "lon": -121.308333,
+   "symbol_table": "6",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "|#-#7%7)N*p!M|"
+  },
+  "expected_spec": {
+   "symbol_overlay": "6",
+   "render_table": "\\"
+  },
+  "disagreements": [
+   "aprslib returns raw compressed table char 'g'; per APRS101 ch.9 a-j encode overlay digits 0-9 -> render alternate-table symbol with overlay '6'"
+  ]
+ },
+ {
+  "id": "v20_compressed_south_east",
+  "category": "compressed_south_east",
+  "note": "compressed, southern/eastern hemisphere",
+  "source_capture": "south120",
+  "raw": "QA3BD-12>APLRT1,WIDE1-1,qAR,QA3ADF-10:=/amJWs:v{k8rQ",
+  "raw_b64": "UUEzQkQtMTI+QVBMUlQxLFdJREUxLTEscUFSLFFBM0FERi0xMDo9L2FtSldzOnZ7azhyUQ==",
+  "expected": {
+   "from": "QA3BD-12",
+   "type": "compressed",
+   "lat": -38.270806,
+   "lon": 145.562823,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 23.47,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "messagecapable": true,
+   "via": "QA3ADF-10"
+  },
+  "ref": {
+   "from": "QA3BD-12",
+   "format": "compressed",
+   "lat": -38.270806,
+   "lon": 145.562823,
+   "symbol_table": "/",
+   "symbol_code": "k",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 23.47,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v21_uncompressed_house",
+  "category": "uncompressed_house",
+  "note": "uncompressed, primary table house",
+  "source_capture": "na480",
+  "raw": "QA3ACR>APU25N,TCPIP*,qAC,Q2AAAA:=4256.19N/08114.42W-",
+  "raw_b64": "UUEzQUNSPkFQVTI1TixUQ1BJUCoscUFDLFEyQUFBQTo9NDI1Ni4xOU4vMDgxMTQuNDJXLQ==",
+  "expected": {
+   "from": "QA3ACR",
+   "type": "uncompressed",
+   "lat": 42.9365,
+   "lon": -81.240333,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": true,
+   "via": "Q2AAAA"
+  },
+  "ref": {
+   "from": "QA3ACR",
+   "format": "uncompressed",
+   "lat": 42.9365,
+   "lon": -81.240333,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v22_uncompressed_repeater_symbol",
+  "category": "uncompressed_repeater_symbol",
+  "note": "uncompressed station using /r repeater symbol",
+  "source_capture": "na480",
+  "raw": "Q4AT-2>APN382,qAR,QA4ADI-10:!3232.05N/08611.63Wr",
+  "raw_b64": "UTRBVC0yPkFQTjM4MixxQVIsUUE0QURJLTEwOiEzMjMyLjA1Ti8wODYxMS42M1dy",
+  "expected": {
+   "from": "Q4AT-2",
+   "type": "uncompressed",
+   "lat": 32.534167,
+   "lon": -86.193833,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "QA4ADI-10"
+  },
+  "ref": {
+   "from": "Q4AT-2",
+   "format": "uncompressed",
+   "lat": 32.534167,
+   "lon": -86.193833,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v23_uncompressed_overlay",
+  "category": "uncompressed_overlay",
+  "note": "uncompressed with overlay char in table position (e.g. S#, D&, I&)",
+  "source_capture": "na480",
+  "raw": "Q9AC-9>APDW18,qAS,Q9AC:!3608.87NT08234.49W&",
+  "raw_b64": "UTlBQy05PkFQRFcxOCxxQVMsUTlBQzohMzYwOC44N05UMDgyMzQuNDlXJg==",
+  "expected": {
+   "from": "Q9AC-9",
+   "type": "uncompressed",
+   "lat": 36.147833,
+   "lon": -82.574833,
+   "symbol_table": "T",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "Q9AC"
+  },
+  "ref": {
+   "from": "Q9AC-9",
+   "format": "uncompressed",
+   "lat": 36.147833,
+   "lon": -82.574833,
+   "symbol_table": "T",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "symbol_overlay": "T",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v24_uncompressed_phg",
+  "category": "uncompressed_phg",
+  "note": "uncompressed with PHG data extension",
+  "source_capture": "na480",
+  "raw": "QA2AAY-3>APN383,qAR,Q2AG-10:!4256.73NS07601.65W#PHG6800",
+  "raw_b64": "UUEyQUFZLTM+QVBOMzgzLHFBUixRMkFHLTEwOiE0MjU2LjczTlMwNzYwMS42NVcjUEhHNjgwMA==",
+  "expected": {
+   "from": "QA2AAY-3",
+   "type": "uncompressed",
+   "lat": 42.9455,
+   "lon": -76.0275,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "phg": "6800",
+   "via": "Q2AG-10"
+  },
+  "ref": {
+   "from": "QA2AAY-3",
+   "format": "uncompressed",
+   "lat": 42.9455,
+   "lon": -76.0275,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "PHG6800"
+  },
+  "expected_spec": {
+   "symbol_overlay": "S",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v25_uncompressed_altitude",
+  "category": "uncompressed_altitude",
+  "note": "uncompressed with /A=nnnnnn altitude (feet)",
+  "source_capture": "na90",
+  "raw": "PMETTO>APOT40,WIDE2-2,qAR,Q1AAH-3:!3727.73NS11734.39W#/A=008873",
+  "raw_b64": "UE1FVFRPPkFQT1Q0MCxXSURFMi0yLHFBUixRMUFBSC0zOiEzNzI3LjczTlMxMTczNC4zOVcjL0E9MDA4ODcz",
+  "expected": {
+   "from": "PMETTO",
+   "type": "uncompressed",
+   "lat": 37.462167,
+   "lon": -117.573167,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 2704.49,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "Q1AAH-3"
+  },
+  "ref": {
+   "from": "PMETTO",
+   "format": "uncompressed",
+   "lat": 37.462167,
+   "lon": -117.573167,
+   "symbol_table": "S",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 2704.49,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "symbol_overlay": "S",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v26_uncompressed_course_speed",
+  "category": "uncompressed_course_speed",
+  "note": "uncompressed moving station, CSE/SPD extension",
+  "source_capture": "south120",
+  "raw": "PY5BK-9>APVM10,TCPIP*,qAC,Q2ACC:!2320.86S/05108.83W>357/015",
+  "raw_b64": "UFk1QkstOT5BUFZNMTAsVENQSVAqLHFBQyxRMkFDQzohMjMyMC44NlMvMDUxMDguODNXPjM1Ny8wMTU=",
+  "expected": {
+   "from": "PY5BK-9",
+   "type": "uncompressed",
+   "lat": -23.347667,
+   "lon": -51.147167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 357,
+   "speed_kmh": 27.78,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "Q2ACC"
+  },
+  "ref": {
+   "from": "PY5BK-9",
+   "format": "uncompressed",
+   "lat": -23.347667,
+   "lon": -51.147167,
+   "symbol_table": "/",
+   "symbol_code": ">",
+   "course": 357,
+   "speed_kmh": 27.78,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v27_uncompressed_ambiguity",
+  "category": "uncompressed_ambiguity",
+  "note": "uncompressed with position ambiguity (spaces in minutes)",
+  "source_capture": "na480",
+  "raw": "QA3J-10>APGRWO,TCPIP*,qAC,T2DENMARK:!4023.6 N\\08002.4 W&",
+  "raw_b64": "UUEzSi0xMD5BUEdSV08sVENQSVAqLHFBQyxUMkRFTk1BUks6ITQwMjMuNiBOXDA4MDAyLjQgVyY=",
+  "expected": {
+   "from": "QA3J-10",
+   "type": "uncompressed",
+   "lat": 40.394167,
+   "lon": -80.040833,
+   "symbol_table": "\\",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 1,
+   "messagecapable": false,
+   "via": "T2DENMARK"
+  },
+  "ref": {
+   "from": "QA3J-10",
+   "format": "uncompressed",
+   "lat": 40.394167,
+   "lon": -80.040833,
+   "symbol_table": "\\",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 1,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v28_uncompressed_lowercase_hemisphere",
+  "category": "uncompressed_lowercase_hemisphere",
+  "note": "uncompressed with lowercase n/s/e/w hemisphere letters",
+  "source_capture": "na90",
+  "raw": "QA7ACZ-10>APRS,WIDE1-1,WIDE2-1,qAR,QA7ACL:!4909.30n/12201.05w#ve7rad-10 fill in digi#",
+  "raw_b64": "UUE3QUNaLTEwPkFQUlMsV0lERTEtMSxXSURFMi0xLHFBUixRQTdBQ0w6ITQ5MDkuMzBuLzEyMjAxLjA1dyN2ZTdyYWQtMTAgZmlsbCBpbiBkaWdpIw==",
+  "expected": {
+   "from": "QA7ACZ-10",
+   "type": "uncompressed",
+   "lat": 49.155,
+   "lon": -122.0175,
+   "symbol_table": "/",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "ve7rad-10 fill in digi#"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "QA7ACL"
+  },
+  "ref": {
+   "from": "QA7ACZ-10",
+   "format": "uncompressed",
+   "lat": 49.155,
+   "lon": -122.0175,
+   "symbol_table": "/",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "ve7rad-10 fill in digi#"
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v29_uncompressed_dao",
+  "category": "uncompressed_dao",
+  "note": "uncompressed with !W..! DAO extra precision",
+  "source_capture": "na480",
+  "raw": "QA0P-1>APURSX,TCPIP*,qAC,T2PERTH:!3837.78N\\09220.65W\\ !w`(!",
+  "raw_b64": "UUEwUC0xPkFQVVJTWCxUQ1BJUCoscUFDLFQyUEVSVEg6ITM4MzcuNzhOXDA5MjIwLjY1V1wgIXdgKCE=",
+  "expected": {
+   "from": "QA0P-1",
+   "type": "uncompressed",
+   "lat": 38.629782,
+   "lon": -92.344179,
+   "symbol_table": "\\",
+   "symbol_code": "\\",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "daodatumbyte": "W",
+   "via": "T2PERTH"
+  },
+  "ref": {
+   "from": "QA0P-1",
+   "format": "uncompressed",
+   "lat": 38.629782,
+   "lon": -92.344179,
+   "symbol_table": "\\",
+   "symbol_code": "\\",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": "w`(",
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v30_timestamped_at_z",
+  "category": "timestamped_at_z",
+  "note": "@ timestamped DHM zulu",
+  "source_capture": "na480",
+  "raw": "Q8AB-5>APNW01,TCPIP*,qAC,T2QUEBEC:@162058z4108.95NI08121.51W&",
+  "raw_b64": "UThBQi01PkFQTlcwMSxUQ1BJUCoscUFDLFQyUVVFQkVDOkAxNjIwNTh6NDEwOC45NU5JMDgxMjEuNTFXJg==",
+  "expected": {
+   "from": "Q8AB-5",
+   "type": "uncompressed",
+   "lat": 41.149167,
+   "lon": -81.3585,
+   "symbol_table": "I",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": true,
+   "raw_timestamp": "162058z",
+   "via": "T2QUEBEC"
+  },
+  "ref": {
+   "from": "Q8AB-5",
+   "format": "uncompressed",
+   "lat": 41.149167,
+   "lon": -81.3585,
+   "symbol_table": "I",
+   "symbol_code": "&",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "symbol_overlay": "I",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v31_timestamped_at_h",
+  "category": "timestamped_at_h",
+  "note": "@ timestamped HMS zulu",
+  "source_capture": "na480",
+  "raw": "QA4O>APWW11,TCPIP*,qAC,Q2ACD:@210143h3847.54N/07731.54W#",
+  "raw_b64": "UUE0Tz5BUFdXMTEsVENQSVAqLHFBQyxRMkFDRDpAMjEwMTQzaDM4NDcuNTROLzA3NzMxLjU0VyM=",
+  "expected": {
+   "from": "QA4O",
+   "type": "uncompressed",
+   "lat": 38.792333,
+   "lon": -77.525667,
+   "symbol_table": "/",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": ""
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": true,
+   "raw_timestamp": "210143h",
+   "via": "Q2ACD"
+  },
+  "ref": {
+   "from": "QA4O",
+   "format": "uncompressed",
+   "lat": 38.792333,
+   "lon": -77.525667,
+   "symbol_table": "/",
+   "symbol_code": "#",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v32_timestamped_slash",
+  "category": "timestamped_slash",
+  "note": "/ timestamped, not messaging capable",
+  "source_capture": "na90",
+  "raw": "Q6ABR-i>APFIAN,TCPIP*,qAC,APRSFI:/205120h4734.21N/12208.81W$aprs.fi iOS!w{O!",
+  "raw_b64": "UTZBQlItaT5BUEZJQU4sVENQSVAqLHFBQyxBUFJTRkk6LzIwNTEyMGg0NzM0LjIxTi8xMjIwOC44MVckYXBycy5maSBpT1Mhd3tPIQ==",
+  "expected": {
+   "from": "Q6ABR-i",
+   "type": "uncompressed",
+   "lat": 47.570332,
+   "lon": -122.146918,
+   "symbol_table": "/",
+   "symbol_code": "$",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "aprs.fi iOS"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "daodatumbyte": "W",
+   "raw_timestamp": "205120h",
+   "via": "APRSFI"
+  },
+  "ref": {
+   "from": "Q6ABR-i",
+   "format": "uncompressed",
+   "lat": 47.570332,
+   "lon": -122.146918,
+   "symbol_table": "/",
+   "symbol_code": "$",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": "w{O",
+   "comment": "aprs.fi iOS"
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v33_timestamped_local",
+  "category": "timestamped_local",
+  "note": "timestamp in local DHM (/) format",
+  "source_capture": "na90",
+  "raw": "QA0ABD-14>APX225,TCPIP*,qAC,FIFTH:@161550/4019.58N/08844.62Wu315/060/A=000754Driving my life away.",
+  "raw_b64": "UUEwQUJELTE0PkFQWDIyNSxUQ1BJUCoscUFDLEZJRlRIOkAxNjE1NTAvNDAxOS41OE4vMDg4NDQuNjJXdTMxNS8wNjAvQT0wMDA3NTREcml2aW5nIG15IGxpZmUgYXdheS4=",
+  "expected": {
+   "from": "QA0ABD-14",
+   "type": "uncompressed",
+   "lat": 40.326333,
+   "lon": -88.743667,
+   "symbol_table": "/",
+   "symbol_code": "u",
+   "course": 315,
+   "speed_kmh": 111.12,
+   "altitude_m": 229.82,
+   "object_name": null,
+   "alive": null,
+   "comment": "Driving my life away."
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": true,
+   "raw_timestamp": "161550/",
+   "via": "FIFTH"
+  },
+  "ref": {
+   "from": "QA0ABD-14",
+   "format": "uncompressed",
+   "lat": 40.326333,
+   "lon": -88.743667,
+   "symbol_table": "/",
+   "symbol_code": "u",
+   "course": 315,
+   "speed_kmh": 111.12,
+   "altitude_m": 229.82,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "Driving my life away."
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v34_object_repeater",
+  "category": "object_repeater",
+  "note": "object: live repeater with frequency/tone comment",
+  "source_capture": "na480",
+  "raw": "Q0AAF>APN391,qAR,QA6ABG:;443.775NE*111111z4104.25N/09613.63WrW0EQU",
+  "raw_b64": "UTBBQUY+QVBOMzkxLHFBUixRQTZBQkc6OzQ0My43NzVORSoxMTExMTF6NDEwNC4yNU4vMDk2MTMuNjNXclcwRVFV",
+  "expected": {
+   "from": "Q0AAF",
+   "type": "object",
+   "lat": 41.070833,
+   "lon": -96.227167,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "443.775NE",
+   "alive": true,
+   "comment": "W0EQU"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "object_format": "uncompressed",
+   "raw_timestamp": "111111z",
+   "via": "QA6ABG"
+  },
+  "ref": {
+   "from": "Q0AAF",
+   "format": "uncompressed",
+   "lat": 41.070833,
+   "lon": -96.227167,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "443.775NE",
+   "alive": true,
+   "kind": "object",
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "W0EQU"
+  },
+  "expected_spec": {
+   "object_name_display": "443.775NE"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v35_object_compressed",
+  "category": "object_compressed",
+  "note": "object with compressed position",
+  "source_capture": "na480",
+  "raw": "Q1ABH>APWW11,STERCT*,WIDE2-1,qAR,QA1AAK:;Q1ABH-1  *162100z/9Hu_<E]U- sTQTH",
+  "raw_b64": "UTFBQkg+QVBXVzExLFNURVJDVCosV0lERTItMSxxQVIsUUExQUFLOjtRMUFCSC0xICAqMTYyMTAwei85SHVfPEVdVS0gc1RRVEg=",
+  "expected": {
+   "from": "Q1ABH",
+   "type": "object",
+   "lat": 41.653683,
+   "lon": -71.579756,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "Q1ABH-1  ",
+   "alive": true,
+   "comment": "QTH"
+  },
+  "aprslib_extra": {
+   "object_format": "compressed",
+   "raw_timestamp": "162100z",
+   "gpsfixstatus": 1,
+   "via": "QA1AAK"
+  },
+  "ref": {
+   "from": "Q1ABH",
+   "format": "compressed",
+   "lat": 41.653683,
+   "lon": -71.579756,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "Q1ABH-1  ",
+   "alive": true,
+   "kind": "object",
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "QTH"
+  },
+  "expected_spec": {
+   "object_name_display": "Q1ABH-1"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v36_object_killed",
+  "category": "object_killed",
+  "note": "object killed (_ flag) -> remove from map",
+  "source_capture": "na480",
+  "raw": "OUNFLS>APRS,qAO,AE5PL-WX:;OUNFLS90A_162100z3534.50N\\09816.80Ww FLOOD }k0IVqnqPR@+.+DaVq{900AA",
+  "raw_b64": "T1VORkxTPkFQUlMscUFPLEFFNVBMLVdYOjtPVU5GTFM5MEFfMTYyMTAwejM1MzQuNTBOXDA5ODE2LjgwV3cgRkxPT0QgfWswSVZxbnFQUkArLitEYVZxezkwMEFB",
+  "expected": {
+   "from": "OUNFLS",
+   "type": "object",
+   "lat": 35.575,
+   "lon": -98.28,
+   "symbol_table": "\\",
+   "symbol_code": "w",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "OUNFLS90A",
+   "alive": false,
+   "comment": "FLOOD }k0IVqnqPR@+.+DaVq{900AA"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "object_format": "uncompressed",
+   "raw_timestamp": "162100z",
+   "via": "AE5PL-WX"
+  },
+  "ref": {
+   "from": "OUNFLS",
+   "format": "uncompressed",
+   "lat": 35.575,
+   "lon": -98.28,
+   "symbol_table": "\\",
+   "symbol_code": "w",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "OUNFLS90A",
+   "alive": false,
+   "kind": "object",
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "FLOOD }k0IVqnqPR@+.+DaVq{900AA"
+  },
+  "expected_spec": {
+   "object_name_display": "OUNFLS90A"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v37_object_ambiguity",
+  "category": "object_ambiguity",
+  "note": "object with ambiguous position (e.g. WINLINK gateway objects)",
+  "source_capture": "na480",
+  "raw": "QA4AS-11>APMI06,qAR,QA2E-10:;442.825_P*111111z2752.  N/08148.  Wr442.825MHz C100 + R40m",
+  "raw_b64": "UUE0QVMtMTE+QVBNSTA2LHFBUixRQTJFLTEwOjs0NDIuODI1X1AqMTExMTExejI3NTIuICBOLzA4MTQ4LiAgV3I0NDIuODI1TUh6IEMxMDAgKyBSNDBt",
+  "expected": {
+   "from": "QA4AS-11",
+   "type": "object",
+   "lat": 27.875,
+   "lon": -81.808333,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "442.825_P",
+   "alive": true,
+   "comment": "442.825MHz C100 + R40m"
+  },
+  "aprslib_extra": {
+   "posambiguity": 2,
+   "object_format": "uncompressed",
+   "raw_timestamp": "111111z",
+   "via": "QA2E-10"
+  },
+  "ref": {
+   "from": "QA4AS-11",
+   "format": "uncompressed",
+   "lat": 27.875,
+   "lon": -81.808333,
+   "symbol_table": "/",
+   "symbol_code": "r",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "442.825_P",
+   "alive": true,
+   "kind": "object",
+   "posambiguity": 2,
+   "dao": null,
+   "comment": "442.825MHz C100 + R40m"
+  },
+  "expected_spec": {
+   "object_name_display": "442.825_P"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v38_weather_position",
+  "category": "weather_position",
+  "note": "weather station position: _ symbol, wind ddd/sss then g t r p P h b",
+  "source_capture": "sydfra60",
+  "raw": "QA3AF-13>APRS,TCPIP*,qAS,QA3AF:@162105z4922.50N/01105.00E_355/006t052rpPh99b10187NodeRED",
+  "raw_b64": "UUEzQUYtMTM+QVBSUyxUQ1BJUCoscUFTLFFBM0FGOkAxNjIxMDV6NDkyMi41ME4vMDExMDUuMDBFXzM1NS8wMDZ0MDUycnBQaDk5YjEwMTg3Tm9kZVJFRA==",
+  "expected": {
+   "from": "QA3AF-13",
+   "type": "uncompressed",
+   "lat": 49.375,
+   "lon": 11.083333,
+   "symbol_table": "/",
+   "symbol_code": "_",
+   "course": 355,
+   "speed_kmh": 11.112,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "rpPh99b10187NodeRED"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": true,
+   "raw_timestamp": "162105z",
+   "weather": {
+    "temperature": 11.11111111111111
+   },
+   "via": "QA3AF"
+  },
+  "ref": {
+   "from": "QA3AF-13",
+   "format": "uncompressed",
+   "lat": 49.375,
+   "lon": 11.083333,
+   "symbol_table": "/",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "355/006t052rpPh99b10187NodeRED"
+  },
+  "expected_spec": {
+   "course": null,
+   "speed_kmh": null,
+   "wind_direction_deg": 355,
+   "wind_speed_mph": 6.0
+  },
+  "disagreements": [
+   "aprslib puts the weather wind direction/speed (ddd/sss, mph) into course/speed (and converts mph as if knots); hamdoor must treat them as wind"
+  ]
+ },
+ {
+  "id": "v39_weather_compressed",
+  "category": "weather_compressed",
+  "note": "compressed weather station position",
+  "source_capture": "na480",
+  "raw": "QA6ABH-11>APLRG1,TCPIP*,qAC,T2PERTH:!L>+TM3Py7_  GLoRa APRS Batt=4.14V",
+  "raw_b64": "UUE2QUJILTExPkFQTFJHMSxUQ1BJUCoscUFDLFQyUEVSVEg6IUw+K1RNM1B5N18gIEdMb1JhIEFQUlMgQmF0dD00LjE0Vg==",
+  "expected": {
+   "from": "QA6ABH-11",
+   "type": "compressed",
+   "lat": 32.400745,
+   "lon": -106.69697,
+   "symbol_table": "L",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "LoRa APRS Batt=4.14V"
+  },
+  "aprslib_extra": {
+   "messagecapable": false,
+   "gpsfixstatus": 1,
+   "via": "T2PERTH"
+  },
+  "ref": {
+   "from": "QA6ABH-11",
+   "format": "compressed",
+   "lat": 32.400745,
+   "lon": -106.69697,
+   "symbol_table": "L",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "LoRa APRS Batt=4.14V"
+  },
+  "expected_spec": {
+   "symbol_overlay": "L",
+   "render_table": "\\"
+  },
+  "disagreements": []
+ },
+ {
+  "id": "v40_positionless_weather",
+  "category": "positionless_weather",
+  "note": "positionless weather report (_ DTI): no map position",
+  "source_capture": "na480",
+  "raw": "BENRDG>APRS,WIDE2-2,qAR,QA7ABI:_10161529c102s000g000t040h43e1w",
+  "raw_b64": "QkVOUkRHPkFQUlMsV0lERTItMixxQVIsUUE3QUJJOl8xMDE2MTUyOWMxMDJzMDAwZzAwMHQwNDBoNDNlMXc=",
+  "expected": {
+   "from": "BENRDG",
+   "type": "wx",
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "e1w"
+  },
+  "aprslib_extra": {
+   "weather": {
+    "wind_direction": 102,
+    "wind_speed": 0.0,
+    "wind_gust": 0.0,
+    "temperature": 4.444444444444445,
+    "humidity": 43
+   },
+   "via": "QA7ABI"
+  },
+  "ref": null,
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v41_third_party",
+  "category": "third_party",
+  "note": "third-party } wrapped packet",
+  "source_capture": "na480",
+  "raw": "Q0AF>APX220,TCPIP*,qAC,Q2ACA:}Q0AF-13>APX220,WIDE1-1,WIDE2-1:!3309.71N/08643.18W_225/005g009t080r000p000P000h066b10102",
+  "raw_b64": "UTBBRj5BUFgyMjAsVENQSVAqLHFBQyxRMkFDQTp9UTBBRi0xMz5BUFgyMjAsV0lERTEtMSxXSURFMi0xOiEzMzA5LjcxTi8wODY0My4xOFdfMjI1LzAwNWcwMDl0MDgwcjAwMHAwMDBQMDAwaDA2NmIxMDEwMg==",
+  "expected": {
+   "from": "Q0AF-13",
+   "type": "thirdparty",
+   "lat": 33.161833,
+   "lon": -86.719667,
+   "symbol_table": "/",
+   "symbol_code": "_",
+   "course": 225,
+   "speed_kmh": 9.26,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "6b10102"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "weather": {
+    "wind_gust": 4.02336,
+    "temperature": 26.666666666666664,
+    "rain_1h": 0.0,
+    "rain_24h": 0.0,
+    "rain_since_midnight": 0.0,
+    "humidity": 6
+   },
+   "outer_from": "Q0AF",
+   "inner_type": "uncompressed"
+  },
+  "ref": {
+   "from": "Q0AF-13",
+   "format": "uncompressed",
+   "lat": 33.161833,
+   "lon": -86.719667,
+   "symbol_table": "/",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "225/005g009t080r000p000P000h066b10102"
+  },
+  "expected_spec": {
+   "course": null,
+   "speed_kmh": null,
+   "wind_direction_deg": 225,
+   "wind_speed_mph": 5.0
+  },
+  "disagreements": [
+   "aprslib puts the weather wind direction/speed (ddd/sss, mph) into course/speed (and converts mph as if knots); hamdoor must treat them as wind"
+  ]
+ },
+ {
+  "id": "v42_status",
+  "category": "status",
+  "note": "status (>): no position",
+  "source_capture": "na480",
+  "raw": "FLINT>APRX29,qAR,METMOR:>Q8ACS",
+  "raw_b64": "RkxJTlQ+QVBSWDI5LHFBUixNRVRNT1I6PlE4QUNT",
+  "expected": {
+   "from": "FLINT",
+   "type": "status",
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": "Q8ACS"
+  },
+  "aprslib_extra": {
+   "via": "METMOR"
+  },
+  "ref": null,
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v43_message",
+  "category": "message",
+  "note": "APRS message (:): no position",
+  "source_capture": "na480",
+  "raw": "WXBOT>APRS,qAS,QA6ABT::QA1AAS-3 :ack125",
+  "raw_b64": "V1hCT1Q+QVBSUyxxQVMsUUE2QUJUOjpRQTFBQVMtMyA6YWNrMTI1",
+  "expected": {
+   "from": "WXBOT",
+   "type": "message",
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_extra": {
+   "addresse": "QA1AAS-3",
+   "via": "QA6ABT"
+  },
+  "ref": null,
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v44_item_alive",
+  "category": "item_alive",
+  "note": "item (live): aprslib 0.7.2 does NOT support items",
+  "source_capture": "na480",
+  "raw": "NEWPRT>APRS,qAR,INDIAN:)PCH!4437.74N/12403.57Wh",
+  "raw_b64": "TkVXUFJUPkFQUlMscUFSLElORElBTjopUENIITQ0MzcuNzROLzEyNDAzLjU3V2g=",
+  "expected": {
+   "from": "NEWPRT",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "UnknownFormat: Format is not supported: ')' item report",
+  "ref": {
+   "from": "NEWPRT",
+   "format": "uncompressed",
+   "lat": 44.629,
+   "lon": -124.0595,
+   "symbol_table": "/",
+   "symbol_code": "h",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "PCH",
+   "alive": true,
+   "kind": "item",
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "type": "item",
+   "lat": 44.629,
+   "lon": -124.0595,
+   "symbol_table": "/",
+   "symbol_code": "h",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "PCH",
+   "alive": true,
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib 0.7.2 raises \"UnknownFormat: Format is not supported: ')' item report\"; spec-based decode shown in expected_spec"
+  ]
+ },
+ {
+  "id": "v45_item_killed",
+  "category": "item_killed",
+  "note": "item (killed): aprslib 0.7.2 does NOT support items",
+  "source_capture": "na480",
+  "raw": "Q4AU-13>APMI06,TCPIP*,qAS,QA4G:)W21_3844.04N\\07750.01W_",
+  "raw_b64": "UTRBVS0xMz5BUE1JMDYsVENQSVAqLHFBUyxRQTRHOilXMjFfMzg0NC4wNE5cMDc3NTAuMDFXXw==",
+  "expected": {
+   "from": "Q4AU-13",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "UnknownFormat: Format is not supported: ')' item report",
+  "ref": {
+   "from": "Q4AU-13",
+   "format": "uncompressed",
+   "lat": 38.734,
+   "lon": -77.8335,
+   "symbol_table": "\\",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "W21",
+   "alive": false,
+   "kind": "item",
+   "posambiguity": 0,
+   "dao": null,
+   "comment": ""
+  },
+  "expected_spec": {
+   "type": "item",
+   "lat": 38.734,
+   "lon": -77.8335,
+   "symbol_table": "\\",
+   "symbol_code": "_",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": "W21",
+   "alive": false,
+   "comment": ""
+  },
+  "disagreements": [
+   "aprslib 0.7.2 raises \"UnknownFormat: Format is not supported: ')' item report\"; spec-based decode shown in expected_spec"
+  ]
+ },
+ {
+  "id": "v46_nmea_raw_gps",
+  "category": "nmea_raw_gps",
+  "note": "raw NMEA $GPRMC: aprslib unsupported",
+  "source_capture": "na90",
+  "raw": "QA4ADL-3>APT311,WIDE2-2,qAR,QA4ADL-7:$GPRMC,205049,A,3242.4435,N,08527.2854,W,000,168,020307,,*0E",
+  "raw_b64": "UUE0QURMLTM+QVBUMzExLFdJREUyLTIscUFSLFFBNEFETC03OiRHUFJNQywyMDUwNDksQSwzMjQyLjQ0MzUsTiwwODUyNy4yODU0LFcsMDAwLDE2OCwwMjAzMDcsLCowRQ==",
+  "expected": {
+   "from": "QA4ADL-3",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "UnknownFormat: Format is not supported: '$' raw gps",
+  "ref": null,
+  "expected_spec": {
+   "type": "nmea",
+   "lat": 32.707392,
+   "lon": -85.454757,
+   "fix_valid": true,
+   "speed_kmh": 0.0,
+   "course": 168.0
+  },
+  "disagreements": [
+   "aprslib 0.7.2 does not decode raw NMEA ($GPRMC); position computed from the RMC sentence (0.07% of traffic, optional)"
+  ]
+ },
+ {
+  "id": "v47_broken_igate_monitor_prefix",
+  "category": "broken_igate_monitor_prefix",
+  "note": "igate leaked TNC monitor text ' <<UI>>:' before the info field",
+  "source_capture": "kc60",
+  "raw": "Q0ABE-9>APAT51,Q0AAD-3*,WIDE2-1,qAS,QA0AAI-3: <<UI>>:!3910.85N/09154.61W-/A=000760Q0ABE",
+  "raw_b64": "UTBBQkUtOT5BUEFUNTEsUTBBQUQtMyosV0lERTItMSxxQVMsUUEwQUFJLTM6IDw8VUk+PjohMzkxMC44NU4vMDkxNTQuNjFXLS9BPTAwMDc2MFEwQUJF",
+  "expected": {
+   "from": "Q0ABE-9",
+   "type": "uncompressed",
+   "lat": 39.180833,
+   "lon": -91.910167,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 231.65,
+   "object_name": null,
+   "alive": null,
+   "comment": "Q0ABE"
+  },
+  "aprslib_extra": {
+   "posambiguity": 0,
+   "messagecapable": false,
+   "via": "QA0AAI-3"
+  },
+  "ref": {
+   "from": "Q0ABE-9",
+   "format": "uncompressed",
+   "lat": 39.180833,
+   "lon": -91.910167,
+   "symbol_table": "/",
+   "symbol_code": "-",
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": 231.65,
+   "object_name": null,
+   "alive": null,
+   "kind": null,
+   "posambiguity": 0,
+   "dao": null,
+   "comment": "Q0ABE"
+  },
+  "expected_spec": null,
+  "disagreements": []
+ },
+ {
+  "id": "v48_malformed_ultimeter",
+  "category": "malformed_ultimeter",
+  "note": "Ultimeter '!!' logging data: no position (repo parser invents one)",
+  "source_capture": "na90",
+  "raw": "QA4ADJ-3>APN383,qAO,Q4AAM-10:!!000000DD018B0A2C----------------002B026000000000",
+  "raw_b64": "UUE0QURKLTM+QVBOMzgzLHFBTyxRNEFBTS0xMDohITAwMDAwMEREMDE4QjBBMkMtLS0tLS0tLS0tLS0tLS0tMDAyQjAyNjAwMDAwMDAwMA==",
+  "expected": {
+   "from": "QA4ADJ-3",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "ParseError: invalid format",
+  "ref": null,
+  "expected_spec": {
+   "lat": null,
+   "lon": null
+  },
+  "disagreements": [
+   "no valid position: the parser must return None (the current hamdoor parser invents one here)"
+  ]
+ },
+ {
+  "id": "v49_malformed_object_name",
+  "category": "malformed_object_name",
+  "note": "object with 8-char name: no valid position (repo parser invents one)",
+  "source_capture": "na480",
+  "raw": "QA7M-9>APBPQ1,TCPIP*,qAC,T2CAEAST:;QA7M*111111z4111.09N/11202.57W",
+  "raw_b64": "UUE3TS05PkFQQlBRMSxUQ1BJUCoscUFDLFQyQ0FFQVNUOjtRQTdNKjExMTExMXo0MTExLjA5Ti8xMTIwMi41N1c=",
+  "expected": {
+   "from": "QA7M-9",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "ParseError: invalid format",
+  "ref": null,
+  "expected_spec": {
+   "lat": null,
+   "lon": null
+  },
+  "disagreements": [
+   "no valid position: the parser must return None (the current hamdoor parser invents one here)"
+  ]
+ },
+ {
+  "id": "v50_malformed_extra_digit",
+  "category": "malformed_extra_digit",
+  "note": "malformed uncompressed (extra digit): no position (repo parser invents one)",
+  "source_capture": "na90",
+  "raw": "QA4N-6>APTT4,WIDE1-1,WIDE2-1,WIDE2-2,qAR,QA4O-6:!3839.54N/07732.587\u007fW#PHG71304/ QA4N-6 DIGI",
+  "raw_b64": "UUE0Ti02PkFQVFQ0LFdJREUxLTEsV0lERTItMSxXSURFMi0yLHFBUixRQTRPLTY6ITM4MzkuNTROLzA3NzMyLjU4N39XI1BIRzcxMzA0LyBRQTROLTYgRElHSQ==",
+  "expected": {
+   "from": "QA4N-6",
+   "type": null,
+   "lat": null,
+   "lon": null,
+   "symbol_table": null,
+   "symbol_code": null,
+   "course": null,
+   "speed_kmh": null,
+   "altitude_m": null,
+   "object_name": null,
+   "alive": null,
+   "comment": null
+  },
+  "aprslib_error": "ParseError: invalid format",
+  "ref": null,
+  "expected_spec": {
+   "lat": null,
+   "lon": null
+  },
+  "disagreements": [
+   "no valid position: the parser must return None (the current hamdoor parser invents one here)"
+  ]
+ }
+]

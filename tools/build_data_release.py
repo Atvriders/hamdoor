@@ -2,8 +2,10 @@
 """Build the weekly geocode data release.
 
 Runs a full FCC ULS import plus a complete Census geocode backfill, then
-exports the persistent `geocodes` cache table as geocodes.sqlite.gz for
-publishing as a GitHub Release asset. hamdoor containers download that
+exports the persistent `geocodes` cache table (with Census's matched address,
+so containers can vet Non_Exact matches) and the `geocode_misses` table (so
+containers don't re-send ~40k unmatchable addresses) as geocodes.sqlite.gz
+for publishing as a GitHub Release asset. hamdoor containers download that
 artifact instead of geocoding ~700k addresses themselves.
 
 Intended to run in CI (takes ~1.5–3 h, mostly Census throttling waits).
@@ -43,20 +45,30 @@ def main():
 
     src = sqlite3.connect(DB_PATH)
     dst = sqlite3.connect(raw)
-    dst.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL, quality TEXT)")
+    dst.execute("CREATE TABLE geocodes (address_key TEXT PRIMARY KEY, lat REAL, lon REAL,"
+                " quality TEXT, matched_address TEXT, source TEXT)")
     dst.executemany(
-        "INSERT INTO geocodes VALUES (?, ?, ?, ?)",
-        src.execute("SELECT address_key, lat, lon, quality FROM geocodes"),
+        "INSERT INTO geocodes VALUES (?, ?, ?, ?, ?, ?)",
+        src.execute("SELECT address_key, lat, lon, quality, matched_address, source FROM geocodes"),
+    )
+    dst.execute("CREATE TABLE geocode_misses (address_key TEXT PRIMARY KEY, status TEXT,"
+                " tries INTEGER, last_try TEXT)")
+    dst.executemany(
+        "INSERT INTO geocode_misses VALUES (?, ?, ?, ?)",
+        src.execute("SELECT address_key, status, tries, last_try FROM geocode_misses"
+                    " WHERE address_key NOT IN (SELECT address_key FROM geocodes)"),
     )
     dst.commit()
     total = dst.execute("SELECT COUNT(*) FROM geocodes").fetchone()[0]
+    misses = dst.execute("SELECT COUNT(*) FROM geocode_misses").fetchone()[0]
     dst.close()
     src.close()
 
     with open(raw, "rb") as f_in, gzip.open(gz, "wb", compresslevel=6) as f_out:
         shutil.copyfileobj(f_in, f_out)
     os.remove(raw)
-    print(f"[release] {gz}: {total} geocodes, {os.path.getsize(gz)/1e6:.1f} MB")
+    print(f"[release] {gz}: {total} geocodes, {misses} unmatchable addresses,"
+          f" {os.path.getsize(gz)/1e6:.1f} MB")
     if total < 400_000:
         sys.exit(f"[release] suspiciously few geocodes ({total}) — refusing to publish")
 

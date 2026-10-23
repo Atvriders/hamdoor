@@ -10,3 +10,6 @@ tests/
 Dockerfile
 docker-compose*.yml
 README.md
+secret_key
+*.db-wal
+*.db-shm

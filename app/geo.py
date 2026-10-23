@@ -25,6 +25,41 @@ def bounding_box(lat: float, lon: float, radius_miles: float) -> tuple[float, fl
     return (lat - dlat, lat + dlat, lon - dlon, lon + dlon)
 
 
+def clamp_bbox(min_lat: float, max_lat: float, min_lon: float, max_lon: float) -> tuple[float, float, float, float]:
+    """Normalize a map viewport to valid coordinates.
+
+    Leaflet reports west/east beyond ±180 when the view is wider than the
+    world or panned across the antimeridian; clamp instead of rejecting.
+    Swapped edges are put back in order. Returns (min_lat, max_lat, min_lon, max_lon).
+    """
+    min_lat, max_lat = sorted((min_lat, max_lat))
+    min_lon, max_lon = sorted((min_lon, max_lon))
+    if max_lon - min_lon >= 360:
+        min_lon, max_lon = -180.0, 180.0
+    return (max(-90.0, min_lat), min(90.0, max_lat), max(-180.0, min_lon), min(180.0, max_lon))
+
+
+# map zoom -> cluster cell size in degrees (shared by every clustered map layer)
+_CELL_BY_ZOOM = {4: 5.0, 5: 3.0, 6: 2.0, 7: 1.0, 8: 0.5, 9: 0.25,
+                 10: 0.05, 11: 0.025, 12: 0.0125, 13: 0.00625}
+
+
+def cell_degrees(zoom: int) -> float:
+    """Cluster cell size for a zoom level. Below 4 → 6°, beyond 13 → the z13 size.
+    180 is a multiple of every size, so cells never straddle the antimeridian."""
+    if zoom < 4:
+        return 6.0
+    return _CELL_BY_ZOOM.get(zoom, _CELL_BY_ZOOM[13])
+
+
+def snap_bbox(min_lat: float, max_lat: float, min_lon: float, max_lon: float,
+              cell: float) -> tuple[float, float, float, float]:
+    """Expand a bbox outward to whole cells so edge clusters count their whole
+    cell (stable while panning) instead of only the visible sliver."""
+    return (math.floor(min_lat / cell) * cell, (math.floor(max_lat / cell) + 1) * cell,
+            math.floor(min_lon / cell) * cell, (math.floor(max_lon / cell) + 1) * cell)
+
+
 def grid_to_latlon(grid: str) -> tuple[float, float] | None:
     """Convert a maidenhead locator (4, 6 or 8 chars) to its center lat/lon.
 
