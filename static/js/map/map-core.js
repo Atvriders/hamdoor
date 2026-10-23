@@ -628,7 +628,12 @@
           const flatten = () => {
             try {
               for (const ly of m.getStyle().layers || []) {
-                if (ly.type === "fill-extrusion") m.setLayoutProperty(ly.id, "visibility", "none"); // 3-D buildings lean off their footprints
+                if (ly.type === "fill-extrusion") {
+                  // 3-D buildings lean off their footprints and look offset from the pins:
+                  // draw them flat, so every house sits exactly under its own pin
+                  m.setPaintProperty(ly.id, "fill-extrusion-height", 0);
+                  m.setPaintProperty(ly.id, "fill-extrusion-base", 0);
+                }
                 if (ly.id === "poi_r20" || ly.id === "poi_r7" || ly.id === "poi_transit") m.setLayoutProperty(ly.id, "visibility", "none"); // POI and transit icons read as marks
               }
               if (m.getLayer("landuse_residential")) m.setPaintProperty("landuse_residential", "fill-color", "hsla(226, 22%, 90%, 0.45)");
