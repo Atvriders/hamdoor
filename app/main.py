@@ -6,6 +6,7 @@ import re
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
@@ -79,10 +80,28 @@ async def lifespan(_: FastAPI):
     aprs_feed.stop()
 
 
-# no Swagger/ReDoc pages: they load unpinned CDN scripts into hamdoor's origin,
-# where the session token lives (the OpenAPI schema itself stays available)
+# FastAPI's stock Swagger/ReDoc pages load unpinned CDN scripts into hamdoor's
+# origin, where the session token lives: they stay off, and /api/docs below
+# serves Swagger UI pinned to one version and checked by Subresource Integrity
 app = FastAPI(title="hamdoor", version="1.0.0", docs_url=None, redoc_url=None,
               openapi_url="/api/openapi.json", lifespan=lifespan)
+
+_SWAGGER = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.34.0"
+_SWAGGER_JS_SRI = "sha384-9Td7MKiIr2S83E1kZyyVi8KdJw/S8CpAvu0llLyMeg0xq/hDGiZJfVn0fV4llCmK"
+_SWAGGER_CSS_SRI = "sha384-4c3vsE5f+trhFyHrFrLM1fFGUn531NIaC7dcqEWIJdoRQJ5CkJbSuSCwXLpaS1KF"
+
+
+@app.get("/api/docs", include_in_schema=False)
+def api_docs():
+    """Interactive API docs (Swagger UI). Calls still need a bearer token:
+    paste one from log in into Authorize."""
+    js, css = f"{_SWAGGER}/swagger-ui-bundle.js", f"{_SWAGGER}/swagger-ui.css"
+    html = get_swagger_ui_html(openapi_url=app.openapi_url, title="hamdoor API",
+                               swagger_js_url=js, swagger_css_url=css,
+                               swagger_favicon_url="data:,").body.decode()
+    html = html.replace(f'src="{js}"', f'src="{js}" integrity="{_SWAGGER_JS_SRI}" crossorigin="anonymous"')
+    html = html.replace(f'href="{css}"', f'href="{css}" integrity="{_SWAGGER_CSS_SRI}" crossorigin="anonymous"')
+    return HTMLResponse(html)
 # map payloads run to ~1.5 MB for a dense view; gzip shrinks them ~8x
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(BodySizeLimitMiddleware)

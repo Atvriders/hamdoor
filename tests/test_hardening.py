@@ -266,15 +266,20 @@ def test_bidi_controls_are_stripped_from_member_text(client, db):
 # ---------------------------------------------------------------- SEC-06 / SEC-07 headers, docs
 
 
-def test_security_headers_and_no_swagger_page(client):
-    for path in ("/", "/api/health", "/static/js/hd-core.js"):
+def test_security_headers_and_pinned_swagger_page(client):
+    for path in ("/", "/api/health", "/static/js/hd-core.js", "/api/docs"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
         assert r.headers["x-frame-options"] == "DENY"
         assert r.headers["x-content-type-options"] == "nosniff"
         assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin"
-    assert client.get("/api/docs").status_code == 404   # old code: Swagger UI from a CDN
+    # the interactive docs load Swagger UI pinned to one version with
+    # Subresource Integrity (the stock page loads an unpinned CDN build)
+    html = client.get("/api/docs").text
+    assert "swagger-ui-dist@5.34.0/swagger-ui-bundle.js\" integrity=\"sha384-" in html
+    assert "swagger-ui-dist@5.34.0/swagger-ui.css\" integrity=\"sha384-" in html
+    assert "swagger-ui-dist@5/" not in html and "fastapi.tiangolo.com" not in html
     assert client.get("/api/redoc").status_code == 404
     assert client.get("/api/openapi.json").status_code == 200
 

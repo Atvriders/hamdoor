@@ -149,7 +149,8 @@ pytest -q
 Everything the web app does goes through this REST API (the same one a mobile
 app would use). All endpoints need the bearer token from log in, except
 `/api/config`, `/api/health`, `/api/lookup/*` and `/api/auth/*` (those three
-groups are rate-limited). The OpenAPI schema is at `/api/openapi.json`.
+groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
+(paste a token from log in into Authorize); the schema is at `/api/openapi.json`.
 
 | Endpoint | Description |
 | --- | --- |
