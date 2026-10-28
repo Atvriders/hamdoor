@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 330
     permissions:
       contents: write   # publish the release asset
+      actions: write    # keep this weekly schedule enabled (see the last step)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,3 +38,12 @@ jobs:
             --title "ULS geocode data" \
             --notes "Weekly geocoded FCC address cache for hamdoor" || true
           gh release upload uls-data-latest build/geocodes.sqlite.gz --clobber
+
+      # GitHub disables scheduled workflows after 60 days without commits
+      # (this one stopped on 2026-10-12). Re-enabling it on every run resets
+      # that clock, so the weekly release keeps coming in quiet months.
+      - name: Keep the weekly schedule enabled
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/data.yml/enable"
