@@ -263,7 +263,7 @@
 
   // ---------------------------------------------------------------- top bars: the page pads itself by the bar's height
 
-  const ro = window.ResizeObserver ? new ResizeObserver((entries) => { for (const en of entries) measureBar(en.target); }) : null;
+  const ro = window.ResizeObserver ? new ResizeObserver((entries) => { for (const en of entries) measureBar(en.target); publishScrollTop(); }) : null;
   const bars = new Set();
   function measureBar(bar) {
     const holder = bar.parentElement;
@@ -273,7 +273,12 @@
     // the bar's whole height, padding included: on desktop the sticky aside and thread column stick just under it
     holder.style.setProperty("--hd-topbar-full", Math.round(bar.offsetHeight) + "px");
   }
-  function measureTopbars() { bars.forEach(measureBar); }
+  function measureTopbars() { bars.forEach(measureBar); publishScrollTop(); }
+  /** The page's scroll-padding-top (app.css): the visible list's top bar, so keyboard focus never lands under it. */
+  function publishScrollTop() {
+    const bar = LIST_ROUTES.has(routeName()) ? currentTopbar() : null;
+    root.style.setProperty("--hd-scroll-top", (bar ? bar.offsetHeight : 0) + "px");
+  }
   /** Views register their top bars; the bar's parent gets --hd-topbar-h (its .hd-page pads by it). */
   function watchTopbar(bar) {
     if (!bar || bars.has(bar)) return;

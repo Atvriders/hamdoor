@@ -40,15 +40,29 @@
     const p = posts.def.newestBy(call);
     return p ? K.postBadge(p.category) : "";
   }
+  /* The row a label may take, on the right of its mark or flipped to the left: l and r reach from the mark's centre to
+     where the label starts on each side. A repeater cap riding a count's rim keeps off these rows, so it never takes
+     the place of "You" or a neighbour's callsign (layer-repeaters.js). 15 px 800 type with its halo, 16 px tall. */
+  const labelRow = (ctx, cx, cy, l, r, text) => {
+    if (!ctx.labelRows || !ctx.T) return;
+    const w = K.textWidth(`800 15px ${ctx.T.font}`, text) + 2;
+    ctx.labelRows.push([cx - l - w, cy - 10, cx + r + w, cy + 10]);
+  };
   function render(data, ctx) {
     const want = new Map(), z = ctx.zoom, me = M.me(), y = M.youPlace();
     const merge = MERGE();
-    // you: always drawn, always labelled; below z10 the word "You" steps outside your metro's postmark
+    // you: always drawn, always labelled; below z10 the word "You" steps outside your metro's postmark. The word is a
+    // mark of its own in the hd-ride pane, above every count: below z10 your dot drops under your metro's postmark
+    // (the hd-you pane goes to 590) and the word must not go with it (§3.2, §9.1: "You" always shows)
     if (y && me) {
-      const lx = Math.round(ctx.rim ? ctx.rim.youLbl : 10);
-      want.set("you", { latlng: [y.lat, y.lon], size: [18, 18], pane: "hd-you", z: 1000, lbl: true, always: true, pri: -10,
+      const lx = Math.round(ctx.rim ? ctx.rim.youLbl : 10), lxl = Math.round(ctx.rim ? ctx.rim.youLblL : 10);
+      want.set("you", { latlng: [y.lat, y.lon], size: [18, 18], pane: "hd-you", z: 1000,
         item: { layer: "members", kind: "you" }, title: `You, ${me.callsign}`,
-        html: `<div class="hd-mk-you${y.approx ? " hd-mk-you--approx" : ""}" style="--you-lbl:${lx}px"><div class="hd-mk-you__halo"></div><div class="hd-mk-you__dot"></div>${postBadgeFor(me.callsign, z)}<span class="hd-lbl hd-lbl--you hd-halo">You</span></div>` });
+        html: `<div class="hd-mk-you${y.approx ? " hd-mk-you--approx" : ""}"><div class="hd-mk-you__halo"></div><div class="hd-mk-you__dot"></div>${postBadgeFor(me.callsign, z)}</div>` });
+      want.set("you:lbl", { latlng: [y.lat, y.lon], size: [18, 18], pane: "hd-ride", z: 1000, lbl: true, always: true, pri: -10, interactive: false,
+        html: `<div class="hd-mk-you" style="--you-lbl:${lx}px;--you-lbl-l:${lxl}px"><span class="hd-lbl hd-lbl--you hd-halo">You</span></div>` });
+      const yq = ctx.toPoint(y.lat, y.lon);
+      labelRow(ctx, yq.x, yq.y, 9 + lxl, 9 + lx, "You");
     }
     if (!M.isOn("members")) return want;
     const list = people();
@@ -69,6 +83,7 @@
     // the rim slot: up-left of you, else down-left, down-right, up-right; free = no other neighbour within 24 px
     const others = pts.filter((a) => !atYou.includes(a));
     const slot = yp ? ([[-17, -17], [-17, 17], [17, 19], [17, -19]].find(([dx, dy]) => others.every((o) => Math.hypot(o.p.x - (yp.x + dx), o.p.y - (yp.y + dy)) >= merge)) || [-17, -17]) : null;
+    if (atYou.length && ctx.rim && ctx.rim.taken) ctx.rim.taken.push([yp.x + slot[0] - 13, yp.y + slot[1] - 13, yp.x + slot[0] + 13, yp.y + slot[1] + 13]);
     const youAnchor = (g, lat, lon, w, h) => {
       if (!g.onYou || !yp) return undefined;
       const p = ctx.toPoint(lat, lon), cx = yp.x + slot[0], cy = yp.y + slot[1];
@@ -80,7 +95,9 @@
         const title = `${m.callsign}, ${m.first}, on hamdoor${m.approx ? ", shown at the centre of a grid square" : ""}`;
         if (z >= M.MINZ.memberLabels) {
           const isSel = !!ctx.sel && ctx.sel.layer === "members" && ctx.sel.kind === "member" && ctx.sel.m.callsign === m.callsign;
-          want.set("m:" + m.callsign, { latlng: ll, size: [24, 24], anchor: youAnchor(g, ll[0], ll[1], 24, 24), pane: g.onYou ? "hd-ride" : "hd-ops", lbl: true, pri: isSel ? -5 : 0, always: isSel, item, title, calls: [m.callsign],
+          const anchor = youAnchor(g, ll[0], ll[1], 24, 24), at = anchor ? { x: yp.x + slot[0], y: yp.y + slot[1] } : g[0].p;
+          labelRow(ctx, at.x, at.y, 21, 21, m.callsign); // the label starts 9 px beside the 24 px mark
+          want.set("m:" + m.callsign, { latlng: ll, size: [24, 24], anchor, pane: g.onYou ? "hd-ride" : "hd-ops", lbl: true, pri: isSel ? -5 : 0, always: isSel, item, title, calls: [m.callsign],
             html: `<div class="hd-mk-member">${K.memberSvg(m)}${postBadgeFor(m.callsign, z)}<span class="hd-lbl hd-lbl--member hd-halo">${esc(m.callsign)}</span></div>` });
         } else {
           want.set("m:" + m.callsign, { latlng: ll, size: [14, 14], anchor: (ctx.rim && ctx.rim.anchor(ll[0], ll[1], 14, 14)) || youAnchor(g, ll[0], ll[1], 14, 14), pane: "hd-ops", item, title, calls: [m.callsign],
@@ -173,7 +190,8 @@
         <div class="hd-detail__actions"><button class="hd-btn hd-btn--sm" type="button" data-goto="${esc(JSON.stringify(["you", { focus: "privacy" }]))}">${M.ic("lock", 20)}Map privacy and profile</button></div>`;
     }
     if (it.kind === "member") {
-      const m = it.m, b = brg(m);
+      // at your own point (under 0.05 mi, M.distDir's rule) there is no direction to give, and no beam heading
+      const m = it.m, d = M.distFromHome(m.lat, m.lon), b = d != null && d < 0.05 ? null : brg(m);
       const heading = b == null ? "" : m.approx ? `about ${Math.round(b / 10) * 10 % 360}°` : `${Math.round(b)}°`;
       const posts = M.L("posts"), lp = posts && posts.def.newestBy ? posts.def.newestBy(m.callsign) : null;
       const note = m.approx
@@ -185,7 +203,7 @@
       return `${K.head(K.memberSvg(m, 40), esc(m.callsign), "hd-call hd-detail__call hd-call--member", M.spell(m.callsign))}
         <p class="hd-detail__lede">${esc(m.first)} is on hamdoor</p><p class="hd-detail__sub">${known ? esc(M.className(m.license_class)) : "Licence class not listed"}${known && m.new ? `, licensed in the last ${newDays}${NB}days` : ""}</p>
         <div class="hd-detail__section">${K.qso([["Grid", esc(m.grid || "Not listed")], ["Class", known ? esc(M.classShort(m.license_class)) : "Not listed"],
-          ["Distance", `${distTxt(m)}${b == null ? "" : ` <small>${M.dir8(b)}</small>`}`], ["Beam heading", heading]])}</div>
+          ["Distance", `${distTxt(m)}${b == null ? "" : ` <small>${M.dir8(b)}</small>`}`], b == null ? null : ["Beam heading", heading]])}</div>
         <div class="hd-detail__actions"><button class="hd-btn hd-btn--primary hd-btn--sm" type="button" data-goto="${esc(JSON.stringify(["feed", { author: m.callsign }]))}">See ${esc(m.first)}'s posts</button><button class="hd-btn hd-btn--sm" type="button" data-copy="${esc(m.callsign)}">${M.ic("copy", 20)}Copy callsign</button></div>
         ${lp ? `<section class="hd-detail__section"><h3 class="hd-detail__h">Latest post</h3><button class="hd-xref" type="button" data-goto="${esc(JSON.stringify(["feed", {}, { sub: ["post", String(lp.id)] }]))}">${K.postBadge(lp.category, true)}<span class="hd-xref__t"><b>${esc(lp.title)}</b><span>${esc(K.catOf(lp.category)[0])}, ${esc(M.ago(lp.created_at))}</span></span></button></section>` : ""}
         ${K.note(note)}`;

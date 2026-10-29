@@ -20,6 +20,7 @@ import httpx
 
 from app.config import get_settings
 from app.integrations.provider import CallsignProvider, CallsignRecord
+from app.textcase import from_capitals
 
 log = logging.getLogger(__name__)
 
@@ -124,11 +125,13 @@ class CallookProvider(CallsignProvider):
         if lat is None or lon is None:
             lat = lon = None
 
+        # callook writes names and addresses in capitals ("ARRL HQ OPERATORS
+        # CLUB", "NEWINGTON"): hamdoor stores them in normal case, acronyms kept
         return CallsignRecord(
             callsign=callsign.upper(),
-            name=(data.get("name") or "").strip(),
-            address_line=(addr.get("line1") or "").strip(),
-            city=city.strip(),
+            name=from_capitals((data.get("name") or "").strip()),
+            address_line=from_capitals((addr.get("line1") or "").strip()),
+            city=from_capitals(city.strip(), place=True),
             state=state.strip(),
             zip=zip_.strip(),
             grid=(loc.get("gridsquare") or "").strip(),

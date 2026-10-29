@@ -84,11 +84,10 @@
     const s = it.s, pota = s.kind === "pota";
     const sub = pota ? [s.ref, s.grid].filter(Boolean).map(esc).join(", ") : esc(s.ref);
     const link = pota ? "https://pota.app/#/park/" + encodeURIComponent(s.ref) : "https://sotl.as/summits/" + s.ref.split("/").map(encodeURIComponent).join("/");
-    const d = M.distFromHome(s.lat, s.lon);
     const mhz = M.khzToMhz(s.khz);
     return `${K.head(`<span class="hd-mk-spot hd-mk-spot--${s.kind}" style="display:block;width:30px;height:30px">${K.spotBadge(s.kind)}</span>`, M.callHtml(s.call), "hd-call hd-detail__call", M.spell(s.call))}
       <p class="hd-detail__lede">Activating ${esc(s.name || s.ref)}</p>${sub ? `<p class="hd-detail__sub">${sub}</p>` : ""}
-      <div class="hd-detail__section">${K.qso([["Frequency", mhz ? `${mhz} <small>MHz</small>` : "Not given"], ["Mode", esc(s.mode || "Not given")], ["Spotted", M.utc(s.time) || "Not given"], ["Distance", d == null ? "Not known" : `${M.mi(d)} <small>${M.dir8(M.bearing(M.home(), s))}</small>`]])}</div>
+      <div class="hd-detail__section">${K.qso([["Frequency", mhz ? `${mhz} <small>MHz</small>` : "Not given"], ["Mode", esc(s.mode || "Not given")], ["Spotted", M.utc(s.time) || "Not given"], ["Distance", M.distDir(s.lat, s.lon) || "Not known"]])}</div>
       <div class="hd-detail__actions">${mhz ? `<button class="hd-btn hd-btn--primary hd-btn--sm" type="button" data-copy="${mhz}">${M.ic("copy", 20)}Copy frequency</button>` : ""}${s.ref ? K.ext(link, pota ? "pota.app" : "Summit page") : ""}</div>
       ${s.comments ? `<section class="hd-detail__section"><h3 class="hd-detail__h">Comment</h3><p class="hd-rptnotes">${esc(s.comments)}</p></section>` : ""}
       ${K.note(`Activators move on. This spot is from ${M.utc(s.time) || "earlier today"}${s.spotter ? `, reported by ${esc(s.spotter)}` : ""}.`)}

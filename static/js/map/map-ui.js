@@ -532,10 +532,9 @@
     if (!st || !st.def.resolve) return;
     const want = sel;
     U._pendingSel = want;
-    Promise.resolve(st.def.resolve(kind, rest)).then((item) => {
+    Promise.resolve(st.def.resolve(kind, rest)).then(async (item) => {
       if (U._pendingSel !== want) return;
-      U._pendingSel = null;
-      if (!item) return;
+      if (!item) { U._pendingSel = null; return; }
       // a card opened from a link shows its mark: when the mark is off screen, or not drawn at this zoom, the map
       // centres on it (at the zoom where its layer draws it); otherwise the reveal rule nudges it clear of chrome
       const ll = U.latlngOf(item);
@@ -546,7 +545,13 @@
         const onScreen = M.map.getBounds().pad(-0.04).contains(ll);
         if (!onScreen || z < need) M.map.setView(ll, z < need ? (zip ? 14 : SEL_SHOW_Z[item.layer] || need) : z, { animate: false });
       }
-      U.openDetail(item, Object.assign({ quiet: true }, opts));
+      // a group (a ZIP, a shared address) is built from what the map loads where it now is, with what this zoom shows
+      // (layer-fcc.js settle), so the card counts what its mark counts
+      const sst = M.L(item.layer);
+      if (sst && sst.def.settle) item = await sst.def.settle(item);
+      if (U._pendingSel !== want) return;
+      U._pendingSel = null;
+      if (item) U.openDetail(item, Object.assign({ quiet: true }, opts));
     }).catch(() => { if (U._pendingSel === want) U._pendingSel = null; });
   };
 
@@ -876,7 +881,7 @@
   };
 
   /* ------------------------------------------------------------ search (§9.8) */
-  let resItems = [], active = -1, searchCtrl = null, searchTimer = 0, lastQ = "";
+  let resItems = [], active = -1, searchCtrl = null, searchTimer = 0, lastQ = "", shownQ = "";
   const input = () => $("#hd-search-input");
   const results = () => $("#hd-search-results");
   const resultsOpen = () => { const r = results(); return !!r && !r.hidden; };
@@ -971,6 +976,7 @@
       }
     } else if (groups.failed) html += `<p class="hd-results__empty">${failText(groups.failed)}</p>`; // what came back, and that some did not
     r.innerHTML = html;
+    shownQ = q;
     r.hidden = false;
     input().setAttribute("aria-expanded", "true");
     $(".hd-mapbar").dataset.results = "open";
@@ -1018,18 +1024,33 @@
   }
   function bindSearch() {
     const inp = input();
-    const run = () => {
+    // pick: Enter was pressed before these results arrived, so it takes their first row once they show, the same row an
+    // Enter on them would take (the first callsign, else the first place in the server's order). Never the aprs.fi row:
+    // that asks a third party, so it waits for a choice the person can see.
+    const run = (pick) => {
+      clearTimeout(searchTimer);
       const q = inp.value.trim();
       lastQ = q;
       if (q.length < 2) { if (searchCtrl) searchCtrl.abort(); closeResults(); return; }
-      runSearch(q).then((g) => { if (g && lastQ === q && document.activeElement === inp) renderResults(q, g); }).catch(() => {});
+      runSearch(q).then((g) => {
+        if (!g || lastQ !== q || document.activeElement !== inp) return;
+        renderResults(q, g);
+        if (pick === true && inp.value.trim() === q && resItems.length && resItems[0].type !== "lookup") chooseResult(0);
+      }).catch(() => {});
     };
     inp.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(run, 250); });
     inp.addEventListener("focus", () => { if (inp.value.trim().length >= 2 && resItems.length) { results().hidden = false; inp.setAttribute("aria-expanded", "true"); $(".hd-mapbar").dataset.results = "open"; } });
     inp.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); if (resultsOpen()) setActive(Math.min(resItems.length - 1, active + 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); if (resultsOpen()) setActive(Math.max(-1, active - 1)); }
-      else if (e.key === "Enter") { e.preventDefault(); if (resultsOpen() && resItems.length) chooseResult(active >= 0 ? active : 0); else run(); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        // the rows on screen answer what is typed: Enter takes the highlighted one, else the first. Rows still answering
+        // an earlier, shorter query ("Tope" while "Topeka" is on its way) are never taken: the search runs now and its
+        // first row is taken when it arrives
+        if (resultsOpen() && resItems.length && shownQ === inp.value.trim()) chooseResult(active >= 0 ? active : 0);
+        else run(true);
+      }
       else if (e.key === "Escape") {
         e.preventDefault(); e.stopPropagation();
         if (resultsOpen()) closeResults(); else { inp.value = ""; lastQ = ""; inp.blur(); }

@@ -31,7 +31,10 @@
   function facts(n) {
     const u = me();
     const approx = HD.isApprox(n);
-    const brg = u.lat != null && n.lat != null ? HD.geo.bearing(u, n) : null;
+    // a neighbour at your own spot (a household, a club station at your address) has no direction or beam heading:
+    // the bearing of a point to itself is a made-up north (the map's rule, M.distDir)
+    const apart = u.lat != null && n.lat != null && HD.geo.distMi(u, n) >= HD.geo.SAME_SPOT_MI;
+    const brg = apart ? HD.geo.bearing(u, n) : null;
     return {
       approx,
       dist: n.distance_miles != null ? HD.fmt.mi(n.distance_miles, { about: approx }) : "",
@@ -39,8 +42,10 @@
       dirWord: brg != null ? HD.fmt.compassWord(brg) : "",
       brg,
       grid: HD.geo.normGrid(n.grid) || HD.geo.toGrid(n.lat, n.lon, 6),
-      cls: n.license_class ? HD.ui.classShort(n.license_class) : "",
-      badge: HD.ui.classBadge(n.license_class ? n.license_class : null, !!n.new),
+      // license_class: "" is a club licence ("C", "Club", as You prints yours), null a callsign the FCC directory has
+      // no row for right now ("Not listed", an empty ring)
+      cls: n.license_class != null ? HD.ui.classShort(n.license_class) : "",
+      badge: HD.ui.classBadge(n.license_class, !!n.new),
       first: HD.firstName(n.name),
     };
   }
@@ -86,9 +91,10 @@
       for (const p of st.posts || []) if (!newest.has(p.author_callsign)) newest.set(p.author_callsign, p);
       box.innerHTML = `<ul class="hd-wall" aria-label="Neighbours">${list.map((m) => {
         const f = facts(m);
+        const dirWord = f.dirWord ? " " + esc(f.dirWord) : "";
         const line = f.approx
-          ? `About ${esc(f.dist.replace(/^about /, ""))} ${esc(f.dirWord)}, shown at a grid-square centre`
-          : `${esc(f.dist)} ${esc(f.dirWord)}${f.brg != null ? `, beam heading ${Math.round(f.brg) % 360}°` : ""}`;
+          ? `About ${esc(f.dist.replace(/^about /, ""))}${dirWord}, shown at a grid-square centre`
+          : `${esc(f.dist)}${dirWord}${f.brg != null ? `, beam heading ${Math.round(f.brg) % 360}°` : ""}`;
         const lp = newest.get(m.callsign);
         return `<li><a class="hd-qsl" href="${mapHref(m)}">
           <span class="hd-qsl__head"><span class="hd-call hd-call--member hd-wall__call">${esc(m.callsign)}</span>${f.badge}</span>

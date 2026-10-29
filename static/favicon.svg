@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 0.5 32 32" width="32" height="32">
+  <title>hamdoor</title>
+  <!-- The door mark (HD.icon.logo, DESIGN_SYSTEM §6.3): a door with a red knob, a person at the door.
+       Blue-plate ink and the red plate; the dark theme's inks when the browser is dark. -->
+  <style>
+    .ink { stroke: #1b2a72; }
+    .knob { fill: #d3271c; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #e8ebf7; }
+      .knob { fill: #ff7a6b; }
+    }
+  </style>
+  <path class="ink" d="M9 30V11a8 8 0 0 1 16 0v19" fill="none" stroke-width="3"/>
+  <path class="ink" d="M5 30h24" fill="none" stroke-width="3" stroke-linecap="round"/>
+  <circle class="knob" cx="21" cy="20" r="2.6"/>
+</svg>

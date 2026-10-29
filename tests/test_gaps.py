@@ -378,15 +378,20 @@ def test_nearby_carries_map_precision_licence_class_and_new(client, db, fcc):
     member(db, "KG7NBA", 39.21, -119.51)
     member(db, "KG7NBB", 39.22, -119.52, precision="grid")
     member(db, "KG7NBC", 39.23, -119.53)                                   # no FCC row
+    member(db, "KG7NBD", 39.24, -119.54)                                   # a club licence
     fcc.ham("KG7NBA", cls="E", granted=mdy(TODAY - timedelta(days=4000)))
     fcc.ham("KG7NBB", cls="T", granted=mdy(TODAY - timedelta(days=10)))
+    fcc.ham("KG7NBD", cls="", granted=mdy(TODAY - timedelta(days=4000)))
     r = client.get("/api/operators/nearby", params={"range": 25}, headers=hdr(viewer))
     got = {o["callsign"]: o for o in r.json()}
     assert {k: got["KG7NBA"][k] for k in ("map_precision", "license_class", "new")} == \
         {"map_precision": "address", "license_class": "E", "new": False}
     assert {k: got["KG7NBB"][k] for k in ("map_precision", "license_class", "new")} == \
         {"map_precision": "grid", "license_class": "T", "new": True}
+    # QA F5: a club ("") and a member the directory has no row for (null) are told apart
     assert {k: got["KG7NBC"][k] for k in ("map_precision", "license_class", "new")} == \
+        {"map_precision": "address", "license_class": None, "new": False}
+    assert {k: got["KG7NBD"][k] for k in ("map_precision", "license_class", "new")} == \
         {"map_precision": "address", "license_class": "", "new": False}
     assert (got["KG7NBB"]["lat"], got["KG7NBB"]["lon"]) == subsquare_centre(39.22, -119.52)
 
@@ -402,10 +407,13 @@ def test_posts_carry_the_authors_class_and_new_flag_everywhere(client, db, fcc):
     created = new_post(client, a, title="new ham here")
     assert (created["author_class"], created["author_new"]) == ("G", True)
     other = new_post(client, b, title="no licence row")
-    assert (other["author_class"], other["author_new"]) == ("", False)
+    assert (other["author_class"], other["author_new"]) == (None, False)       # QA F5: not listed, not a club
     listed = {p["id"]: p for p in feed(client, b)}
     assert (listed[created["id"]]["author_class"], listed[created["id"]]["author_new"]) == ("G", True)
-    assert (listed[other["id"]]["author_class"], listed[other["id"]]["author_new"]) == ("", False)
+    assert (listed[other["id"]]["author_class"], listed[other["id"]]["author_new"]) == (None, False)
+    club = member(db, "KG7AUC", 39.12, -119.42)
+    fcc.ham("KG7AUC", cls="")
+    assert new_post(client, club, title="club station")["author_class"] == ""  # a club licence
     one = client.get(f"/api/posts/{created['id']}", headers=hdr(b)).json()
     edited = client.patch(f"/api/posts/{created['id']}", headers=hdr(a), json={"body": "x"}).json()
     for p in (one, edited):

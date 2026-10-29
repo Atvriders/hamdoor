@@ -174,8 +174,9 @@ class UserPublic(BaseModel):
     lon: float | None
     distance_miles: float | None = None
     map_precision: MapPrecision = "address"
-    # from the member's FCC row ("" / false when the directory has none)
-    license_class: str = ""
+    # from the member's FCC row: "" is a club licence (no operator class),
+    # null means the directory has no row for them right now; new is false then
+    license_class: str | None = None
     new: bool = False
 
 
@@ -320,8 +321,9 @@ class PostOut(BaseModel):
     author_name: str
     # for a 'grid' author: the locator they are shown at (as /api/operators/nearby)
     author_grid: str
-    # the author's FCC licence class and new-ham flag ("" / false when absent)
-    author_class: str = ""
+    # the author's FCC licence class ("" a club licence; null when the
+    # directory has no row for them) and new-ham flag (false when absent)
+    author_class: str | None = None
     author_new: bool = False
     # a 'grid' author's posts sit at their subsquare centre, with
     # distance_miles in whole miles (never their exact point)

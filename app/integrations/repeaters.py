@@ -43,6 +43,7 @@ from sqlalchemy.schema import CreateTable
 
 from app.config import get_settings
 from app.db import engine
+from app.textcase import fix_acronyms, smart_title
 
 log = logging.getLogger(__name__)
 
@@ -51,8 +52,9 @@ PLACES = "geonames"  # pseudo-source: GeoNames cities500, used to judge coordina
 _BUILD = "_build"  # bookkeeping row: when/how the merged table was last built
 
 # bump when the stored per-source records change shape or content (forces a
-# re-fetch; until it succeeds, rebuilds re-apply the privacy scrub to the old set)
-NORMALIZER_VERSION = 2
+# re-fetch; until it succeeds, rebuilds re-apply the privacy scrub to the old set).
+# 3: cities keep their acronyms ("ARRL Headquarters", was "Arrl Headquarters")
+NORMALIZER_VERSION = 3
 # bump when classification / merge rules change (rebuilds from stored records,
 # no network needed; also re-applies the privacy scrub to sets older code
 # stored, even while every source's re-fetch is failing)
@@ -508,14 +510,17 @@ def _country_field(name: str) -> str | None:
 
 def _tidy_city(s: str) -> str:
     """Display form of a city: no locators, ZIPs, street addresses or house
-    numbers; ALL-CAPS / all-lower text title-cased."""
+    numbers; ALL-CAPS / all-lower text title-cased, acronyms kept ('ARRL
+    HEADQUARTERS' -> 'ARRL Headquarters'), and a few acronyms that are never
+    words put back in capitals in mixed-case text ('Arrl Headquarters')."""
     words = [w for w in s.replace(_ADDR, " ").split() if not _LOCATOR_TOKEN.match(w)]
     s = re.sub(r"\s+", " ", _POSTCODE.sub("", " ".join(words))).strip(" .,-;:")
     if _PLACEHOLDER_CITY.match(s):
         return ""
     letters = [c for c in s if c.isalpha()]
     if len(letters) > 3 and (s.upper() == s or s.lower() == s):
-        s = s.title()
+        s = smart_title(s)
+    s = fix_acronyms(s)
     # last, whatever the case looks like now: title-casing must never turn a
     # missed address into a presentable one ('12 avenue foch' -> '12 Avenue Foch')
     return _drop_house_numbers(_scrub(s, "", ""))[:128]

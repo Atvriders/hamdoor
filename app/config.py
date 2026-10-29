@@ -48,8 +48,12 @@ class Settings(BaseSettings):
     # some logins)
     aprs_host: str = "noam.aprs2.net"
     aprs_port: int = 14580
-    dxc_host: str = "ve7cc.net"
-    dxc_port: int = 23
+    # DX cluster telnet node (AR-Cluster), and the nodes tried in turn when one
+    # sends no log-in prompt within a few seconds ("host:port", separated by
+    # commas): ve7cc.net:23, the old default, accepts connections and never answers
+    dxc_host: str = "dxc.nc7j.com"
+    dxc_port: int = 7373
+    dxc_fallbacks: str = "dxc.nc7j.com:7373"
     rbn_host: str = "telnet.reversebeacon.net"
     rbn_port: int = 7000
     # seconds to sample live feeds (APRS-IS / cluster / RBN) per request

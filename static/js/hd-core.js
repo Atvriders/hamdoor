@@ -135,7 +135,9 @@
   /**
    * JSON in, JSON out. Resolves null for 204. Rejects with an Error whose
    * .status is the HTTP status (0 for network failures) and whose .message is
-   * readable text (pydantic validation lists are flattened). AbortError is
+   * readable text (pydantic validation lists are flattened); .notJson is true
+   * when the error came without a JSON body (a proxy in front of hamdoor, such
+   * as Cloudflare, answering with its own page). AbortError is
    * re-thrown untouched so callers can ignore superseded requests.
    * Extras: `timeout` (ms; a timeout rejects like a network failure, with
    * .timedOut) and `keepalive` (a request that outlives the page, §14.5).
@@ -195,6 +197,7 @@
       const err = new Error(msg);
       err.status = resp.status;
       err.detail = detail;
+      err.notJson = data === null;
       throw err;
     }
     return data;
@@ -429,6 +432,8 @@
   const R_MI = 3958.8;
   const RAD = Math.PI / 180;
   HD.geo = {
+    /** Closer than this (miles) is your own spot: a direction or beam heading would be made up (the map's rule, M.distDir) */
+    SAME_SPOT_MI: 0.05,
     /** great-circle miles between {lat, lon} points */
     distMi(a, b) {
       if (!a || !b || a.lat == null || b.lat == null) return null;

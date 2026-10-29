@@ -19,6 +19,19 @@ def test_every_local_asset_exists():
     assert not missing, f"index.html references missing files: {missing}"
 
 
+def test_the_door_mark_is_the_favicon(client):
+    """QA BE-8: no icon, and every visit's /favicon.ico was a 404 (cached by the CDN for hours)."""
+    html = (STATIC / "index.html").read_text()
+    assert '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">' in html
+    svg = client.get("/static/favicon.svg")
+    assert svg.status_code == 200 and svg.headers["content-type"].startswith("image/svg+xml")
+    assert 'stroke="currentColor"' not in svg.text and "prefers-color-scheme: dark" in svg.text
+    ico = client.get("/favicon.ico")
+    assert ico.status_code == 200 and ico.headers["content-type"].startswith("image/svg+xml")
+    assert ico.content == svg.content
+    assert client.head("/favicon.ico").status_code == 200
+
+
 def test_index_serves_versioned_assets(client):
     html = client.get("/").text
     for ref in _refs():
@@ -136,3 +149,14 @@ def test_theme_color_metas_carry_the_surface_tokens():
     assert metas == {"light": light, "dark": dark}
     core = (STATIC / "js" / "hd-core.js").read_text()
     assert "meta[name=\"theme-color\"]" in core and '"--hd-surface"' in core
+
+
+def test_keyboard_focus_is_scrolled_clear_of_the_bars():
+    """QA F11 (WCAG 2.2 SC 2.4.11): list pages scroll the document under a fixed (phone) or sticky (desktop) top bar
+    and the phone tab bar; tabbing hid every third row under the tab bar. The page's scroll-padding keeps what takes
+    focus clear of both: hd-chrome.js publishes the visible top bar's height as --hd-scroll-top."""
+    css = (STATIC / "css" / "app.css").read_text()
+    assert re.search(r"html \{ scroll-padding: calc\(var\(--hd-scroll-top, 0px\)", css)
+    assert re.search(r"scroll-padding-bottom: calc\(var\(--hd-tab-h\) \+ var\(--hd-safe-bottom\)", css)
+    chrome = (STATIC / "js" / "hd-chrome.js").read_text()
+    assert 'root.style.setProperty("--hd-scroll-top"' in chrome

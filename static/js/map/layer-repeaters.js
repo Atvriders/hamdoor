@@ -61,6 +61,46 @@
   }
 
   /* ------------------------------------------------------------ render */
+  /* A machine's cap is drawn on its point, over the counts drawn under the repeaters (postmarks, ZIP groups): one whose
+     point lands on a count (centre within r + 6, or its cap over the count's figures) rides that count's rim instead,
+     so both stay readable, the way neighbours and activators ride postmarks (§3.2). The slot sits clear of the count's
+     figures. Down-right first, where an assembly's tags hang away from the count; then down-left, where a flipped one
+     hangs away; then up-right and up-left. Free = clear of the other counts and of the caps already riding, and if a
+     slot allows, of the rows "You" and the neighbours' callsigns may take (ctx.labelRows): a cap is a mark, and a mark
+     beats a label (§9.2), so a cap riding into such a row would cull the callsign. Returns rider(point, more) -> icon
+     anchor or undefined; more: the width of the "+N" chip a culled assembly shows 3 px right of its cap. */
+  function rider(ctx, s) {
+    const counts = (ctx.postmarks || []).concat(ctx.zipGroups || []), riding = [], rows = ctx.labelRows || [];
+    if (!counts.length) return () => undefined;
+    // a selected ZIP group's selection ring is part of it: a cap rides outside the ring (k.ring: its outer radius)
+    const reach = (k) => k.ring || k.r;
+    const meets = (b, k) => { const R = reach(k); return b[0] < k.x + R && b[2] > k.x - R && b[1] < k.y + R && b[3] > k.y - R; };
+    const overlaps = (b, o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1];
+    // the count's figures: 13 to 15 px type, up to "1.4k" wide
+    const figures = (k) => [k.x - k.r * 0.6, k.y - 8, k.x + k.r * 0.6, k.y + 8];
+    return (p, more) => {
+      const cap = [p.x - s / 2, p.y - s / 2, p.x + s / 2, p.y + s / 2];
+      const on = counts.find((k) => Math.hypot(p.x - k.x, p.y - k.y) < reach(k) + 6 || overlaps(cap, figures(k)));
+      if (!on) return undefined;
+      // on the rim, clear of the figures (8: half their height, plus 1); outside a selection ring, its corner 1 px clear
+      const o = on.ring ? s / 2 + (on.ring + 1) / Math.SQRT2 : Math.max(on.r * 0.78, 8 + s / 2);
+      const boxAt = ([sx, sy]) => [on.x + sx * o - s / 2, on.y + sy * o - s / 2, on.x + sx * o + s / 2, on.y + sy * o + s / 2];
+      const slots = [[1, 1], [-1, 1], [1, -1], [-1, -1]].map(boxAt);
+      const clear = (x) => !riding.some((r) => overlaps(x, r));
+      const apart = (x) => !counts.some((k) => k !== on && meets(x, k));
+      // the cap with its "+N", off the label rows and off the count's own selection ring (the cap alone is outside it)
+      const keepsOff = (x) => {
+        const w = more ? [x[0], x[1], x[2] + 3 + more, x[3]] : x;
+        return !rows.some((r) => overlaps(w, r))
+          && !(on.ring && Math.hypot(M.clamp(on.x, w[0], w[2]) - on.x, M.clamp(on.y, w[1], w[3]) - on.y) < on.ring);
+      };
+      // a free slot that keeps off, else a free one; where every slot meets another count, one off every count's figures
+      const b = slots.find((x) => clear(x) && apart(x) && keepsOff(x)) || slots.find((x) => clear(x) && apart(x))
+        || slots.find((x) => clear(x) && !counts.some((k) => overlaps(x, figures(k)))) || slots[0];
+      riding.push(b);
+      return [Math.round(p.x - b[0]), Math.round(p.y - b[1])];
+    };
+  }
   let selId = null;
   function render(data, ctx) {
     const want = new Map(), z = ctx.zoom;
@@ -83,6 +123,8 @@
       if (near) { near.items.push(...s.items); near.approx = near.approx || s.approx; near.keys.push(s.key); }
       else groups.push({ site: s, p, items: s.items.slice(), approx: s.approx, keys: [s.key] });
     }
+    const ride = rider(ctx, compact ? 18 : 22);
+    const moreW = (n) => (n > 0 ? K.textWidth(`700 13px ${ctx.T.font}`, `+${n}`) + 14 : 0); // the "+N" chip: 7 px padding
     for (const g of groups) {
       const items = g.items.sort((a, c) => (ORDER[K.bandKey(a.band)] - ORDER[K.bandKey(c.band)]) || a.output_mhz - c.output_mhz);
       const shown = items.slice(0, compact ? 1 : 3), more = items.length - shown.length, first = items[0];
@@ -90,14 +132,17 @@
         const x = z >= M.MINZ.rptTone ? [toneText(r), modeText(r)].filter(Boolean).join(" ") : "";
         return `<div class="hd-mk-rpt__tag${r.id === selId ? " is-selected" : ""}" data-rpt="${esc(r.id)}"><span class="hd-mk-rpt__cap hd-mk-rpt__cap--${K.bandKey(r.band)}">${esc(K.bandNum(r.band))}</span><span class="hd-mk-rpt__plate">${rptLine(r)}${x ? `<span class="hd-mk-rpt__x">${esc(x)}</span>` : ""}</span></div>`;
       }).join("");
-      const moreHtml = more > 0 ? `<span class="hd-mk-rpt__more">+${more}${compact ? "" : " more"}</span>` : "";
+      // a culled assembly keeps its first cap, and its "+N" for every other machine, so a city-centre listing of 20
+      // never reads as one repeater (shown only while culled, where it fits: map-marks.js, map.css)
+      const moreHtml = (more > 0 ? `<span class="hd-mk-rpt__more">+${more}${compact ? "" : " more"}</span>` : "")
+        + (!compact && items.length > 1 ? `<span class="hd-mk-rpt__more hd-mk-rpt__n">+${items.length - 1}</span>` : "");
       const cls = `hd-mk-rpt${compact ? " hd-mk-rpt--compact" : ""}${g.approx ? " hd-mk-rpt--approx" : ""}`;
       const pin = compact ? "" : `<span class="hd-mk-rpt__lead"></span><span class="hd-mk-rpt__pin hd-mk-rpt__pin--${K.bandKey(first.band)}"></span>`;
       const site = { lat: g.site.lat, lon: g.site.lon, approx: g.approx };
       const item = items.length === 1 ? { layer: "rpt", kind: "rpt", r: first } : { layer: "rpt", kind: "site", items, lat: site.lat, lon: site.lon, approx: g.approx };
       const isSel = !!ctx.sel && ctx.sel.layer === "rpt" && items.some((r) => r === ctx.sel.r || (ctx.sel.r && r.id === ctx.sel.r.id) || (ctx.sel.items && ctx.sel.items[0] && ctx.sel.items[0].id === r.id));
       want.set("s:" + g.keys.sort().join("|"), {
-        latlng: [site.lat, site.lon], size: compact ? [18, 18] : [22, 22], pane: "hd-rpt", lbl: true, pri: isSel ? -5 : 2, always: isSel, z: isSel ? 800 : 0, noFlip: compact, ids: items.map((r) => r.id),
+        latlng: [site.lat, site.lon], size: compact ? [18, 18] : [22, 22], anchor: ride(g.p, moreW(items.length - 1)), pane: "hd-rpt", lbl: true, pri: isSel ? -5 : 2, always: isSel, z: isSel ? 800 : 0, noFlip: compact, ids: items.map((r) => r.id),
         html: `${pin}<div class="${cls}">${tags}${moreHtml}</div>`, item,
         title: items.length > 1 ? `${items.length} repeaters at this spot, first ${M.freq(first.output_mhz)} megahertz` : `${M.freq(first.output_mhz)} megahertz repeater, ${first.callsign || ""}`,
         onClick: (e, opts) => {

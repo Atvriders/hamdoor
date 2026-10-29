@@ -110,6 +110,7 @@
     // points name people: until the neighbour list is known, a neighbour's licence could pass for anyone's (§3.1)
     if (z < M.MINZ.zipGroups || !M.neighboursKnown()) return want;
     const md = model(data);
+    const selZip = ctx.sel && ctx.sel.layer === "fcc" && ctx.sel.kind === "zip" ? ctx.sel : null;
     for (const g of md.zip) {
       const vis = visibleHams(g.hams, z);
       if (!vis.length) continue;
@@ -118,6 +119,12 @@
       const zipTxt = g.zips.join(" and ");
       want.set(`z:${g.lat},${g.lon}`, { latlng: [g.lat, g.lon], size: [d, d], pane: "hd-zip", html: `<div class="hd-mk-zip">${inner}</div>`,
         title: `${n} ${n === 1 ? "licence" : "licences"} placed by ZIP code ${zipTxt}`, item: zipItem(g, vis) });
+      // a repeater cap that lands on the group rides its rim, clear of the count (layer-repeaters.js); while the group is
+      // selected, outside its selection ring (46 px, its bands reach 30 px out, §3.6)
+      if (ctx.zipGroups && ctx.bounds.pad(0.25).contains([g.lat, g.lon])) {
+        const p = ctx.toPoint(g.lat, g.lon), sel = !!selZip && selZip.lat === g.lat && selZip.lon === g.lon;
+        ctx.zipGroups.push({ x: p.x, y: p.y, r: d / 2, ring: sel ? 30 : 0 });
+      }
     }
     return want;
   }
@@ -285,23 +292,41 @@
     for (const g of md.zip) if (g.hams.some((h) => h.callsign === call)) return g;
     return null;
   }
+  /** the points loaded now, when the answer is points (zoomed in, and not a dense answer) */
+  const loadedPoints = () => { const d = M.data("fcc"); return d && d.type === "points" ? d : null; };
+  /** Where a ZIP's group is drawn, whatever the map shows now: the points loaded here; else the ZIP's centre from place
+   *  search, then the licence points around it at street zoom (a ZIP with many street addresses is anchored at their
+   *  median, which can lie a few miles from its centre). [lat, lon] or null. */
+  async function zipPlace(zip) {
+    const here = loadedPoints(), g = here && model(here).zip.find((x) => x.zips.includes(zip));
+    if (g) return [g.lat, g.lon];
+    const pl = await HD.api(`/api/places/search?q=${encodeURIComponent(zip)}&limit=1`).catch(() => null);
+    const c = pl && (pl.results || []).find((r) => r.kind === "zip" && r.zip === zip && M.finite(r.lat) && M.finite(r.lon));
+    if (!c) return null;
+    const r5 = (v) => Number(v.toFixed(5));
+    const v = { s: r5(c.lat - 0.05), n: r5(c.lat + 0.05), w: r5(c.lon - 0.07), e: r5(c.lon + 0.07), zoom: M.MINZ.zipGroups + 1 };
+    const fk = filterParams(M.prefs.fcc || {});
+    const d = await HD.api(`/api/hams/map?${M.bboxQuery(v)}${fk ? "&" + fk : ""}`).catch(() => null);
+    const p = d && d.type === "points" ? (d.points || []).find((x) => x.loc === "zip" && x.zip === zip) : null;
+    return p ? [p.lat, p.lon] : [c.lat, c.lon];
+  }
   async function resolve(kind, id) {
     id = decodeURIComponent(id || "").toUpperCase();
     // only the neighbour list says whether this licence is a person's (yours or a neighbour's), whose red card
     // opens instead, never their licence at their house (§3.1). A link that arrives before the list waits for it;
     // with no list at all, no licence card opens.
     if (!(await M.whenNeighbours())) return null;
+    // a ZIP group or a shared address is only found here, from any zoom; it is built where the link moves the map
+    // (settle), so its card counts what its mark counts there
     if (kind === "zip") {
-      const data = await M.waitData("fcc", (d) => d && d.type === "points");
-      if (!data) return null;
-      const g = model(data).zip.find((x) => x.zips.includes(id));
-      return g ? zipItem(g, visibleHams(g.hams, M.map.getZoom())) : null;
+      const ll = await zipPlace(id);
+      return ll ? { layer: "fcc", kind: "zip", lat: ll[0], lon: ll[1], zips: [id], hams: [], settle: id } : null;
     }
     if (M.isPerson(id)) return M.L("members").def.resolve(id === (M.me() || {}).callsign ? "you" : "member", id);
     if (kind === "addr") {
-      const data = await M.waitData("fcc", (d) => d && d.type === "points");
-      const pt = data && model(data).addr.find((p) => p.hams.some((h) => h.callsign === id));
-      if (pt) { const vis = visibleHams(pt.hams, M.map.getZoom()); if (vis.length) return pointItem(pt, vis); }
+      const here = loadedPoints(), pt = here && model(here).addr.find((p) => p.hams.some((h) => h.callsign === id));
+      const at = pt || (await fetchDetail(id).then((x) => (x && M.finite(x.lat) && M.finite(x.lon) && x.loc !== "zip" ? x : null), () => null));
+      if (at) return { layer: "fcc", kind: "addr", lat: at.lat, lon: at.lon, hams: [], settle: id };
     }
     const d = await fetchDetail(id).catch(() => null);
     if (!d || !M.finite(d.lat) || !M.neighboursKnown()) return null;
@@ -312,6 +337,18 @@
       drawn ? drawn.lat : d.lat, drawn ? drawn.lon : d.lon, d.loc, d.zip);
     it.detail = d;
     return it;
+  }
+  /** After a link has moved the map (map-ui.js openSel), the group it resolved is built from the points loaded there,
+   *  with what this zoom shows (expired licences from z12), so the card counts what the mark counts. An address that
+   *  turns out to hold one licence opens that licence; one that is gone opens the licence's own card, if it is there. */
+  async function settle(it) {
+    if (it.layer !== "fcc" || !it.settle) return it;
+    const key = it.settle;
+    const find = (d) => { const md = model(d); return it.kind === "zip" ? md.zip.find((g) => g.zips.includes(key)) : md.addr.find((p) => p.hams.some((h) => h.callsign === key)); };
+    const data = await M.waitData("fcc", (d) => !!d && d.type === "points" && !!find(d));
+    const g = data && find(data), vis = g ? visibleHams(g.hams, M.map.getZoom()) : [];
+    if (vis.length) return it.kind === "zip" ? zipItem(g, vis) : pointItem(g, vis);
+    return it.kind === "addr" ? resolve("fcc", key) : null;
   }
   /** The neighbour list changed while a licence card is open: a person's licence never stays open as a licence.
    *  Returns the item to show instead (the same one, a person's card, a group without them), or null to close. */
@@ -351,7 +388,7 @@
     // a dense answer at z10+ is merged 2 x 2 (render): ask for whole blocks
     snapCells: (z) => (z >= M.MINZ.fccDots ? 2 : 1),
     load: (view, signal) => HD.api(`/api/hams/map?${M.bboxQuery(view)}${view.filterKey ? "&" + view.filterKey : ""}`, { signal }),
-    render, canvas, counts, section, hint, card, cardLoad, onCardClick, row, searchRow, inView, pick, resolve, onPersons, selId, latlng, markKey, ring,
+    render, canvas, counts, section, hint, card, cardLoad, onCardClick, row, searchRow, inView, pick, resolve, settle, onPersons, selId, latlng, markKey, ring,
     fccItem,
   });
 })();

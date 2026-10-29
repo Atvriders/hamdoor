@@ -467,7 +467,8 @@
     const you = m.callsign === me().callsign;
     const place = HD.ui.place(m.city, m.state);
     const count = (n, one, many) => (n ? HD.fmt.plural(n, one, many) : "no " + many);
-    const wrote = m.posts || m.comments ? `${count(m.posts, "post", "posts")}, ${count(m.comments, "reply", "replies")}` : "No posts or replies yet";
+    // a sentence of its own: "No posts, 1 reply." (it started "no posts" after "Joined Aug 16.")
+    const wrote = m.posts || m.comments ? HD.fmt.cap(`${count(m.posts, "post", "posts")}, ${count(m.comments, "reply", "replies")}`) : "No posts or replies yet";
     const tags = [
       you ? '<span class="hd-tag hd-tag--you">You</span>' : "",
       m.is_admin ? '<span class="hd-tag">Admin</span>' : "",

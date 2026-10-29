@@ -39,8 +39,10 @@ services:
       HAMQSL_URL: "https://www.hamqsl.com/solarxml.php"
       APRS_HOST: "noam.aprs2.net"               # APRS-IS regional pool (North America)
       APRS_PORT: "14580"
-      DXC_HOST: "ve7cc.net"                     # DX cluster telnet node
-      DXC_PORT: "23"
+      DXC_HOST: "dxc.nc7j.com"                  # DX cluster telnet node (AR-Cluster)
+      DXC_PORT: "7373"
+      DXC_FALLBACKS: "dxc.nc7j.com:7373"        # host:port, comma-separated: tried in turn
+                                                # when a node sends no log-in prompt
       RBN_HOST: "telnet.reversebeacon.net"      # CW Reverse Beacon Network
       RBN_PORT: "7000"
       ACTIVITY_SAMPLE_SECONDS: "15"             # live sample window per request
@@ -48,11 +50,12 @@ services:
       ACTIVITY_MAX_SPOTS: "200"
 
       # --- FCC ULS whole-database import ---
-      ULS_IMPORT_ENABLED: "true"                # weekly auto-refresh of all US hams
+      ULS_IMPORT_ENABLED: "true"                # every US ham, from the FCC's weekly extract
       ULS_URL: "https://data.fcc.gov/download/pub/uls/complete/l_amat.zip"
       GEONAMES_URL: "https://download.geonames.org/export/zip/US.zip"
-      ULS_REFRESH_DAYS: "7"
-      ULS_CHECK_INTERVAL_HOURS: "24"
+      ULS_CHECK_INTERVAL_HOURS: "24"            # how often to ask the FCC for a newer extract
+      ULS_REFRESH_DAYS: "7"                     # re-import after this long if the FCC gives no
+                                                # Last-Modified date; geocode release at most this often
       NEW_HAM_DAYS: "90"                        # star on the map for this long after grant
       HAMS_MAP_MAX_RESULTS: "10000"             # max individual pins per map viewport
                                                 # (denser views get fine clusters)

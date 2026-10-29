@@ -35,6 +35,7 @@ import zipfile
 from collections import Counter
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 from sqlalchemy import text
@@ -42,6 +43,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.db import engine
 from app.geo import cell_degrees
+from app.textcase import from_capitals, place_key, tidy_case
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +131,11 @@ def _marker_path() -> str:
     return os.path.join(_data_dir(), ".uls_last_import")
 
 
+def _extract_marker_path() -> str:
+    """The FCC's Last-Modified date of the extract the last import read."""
+    return os.path.join(_data_dir(), ".uls_extract")
+
+
 def _release_marker_path() -> str:
     return os.path.join(_data_dir(), ".data_release_fetched")
 
@@ -142,14 +149,15 @@ def _release_matched_marker_path() -> str:
 def _read_marker(path: str) -> datetime | None:
     try:
         with open(path) as fh:
-            return datetime.fromisoformat(fh.read().strip())
+            dt = datetime.fromisoformat(fh.read().strip())
     except (OSError, ValueError):
         return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _write_marker(path: str):
+def _write_marker(path: str, when: datetime | None = None):
     with open(path, "w") as fh:
-        fh.write(datetime.now(timezone.utc).isoformat())
+        fh.write((when or datetime.now(timezone.utc)).isoformat())
 
 
 def last_import() -> datetime | None:
@@ -164,22 +172,56 @@ def _utc_stamp(dt: datetime | None = None) -> str:
     return (dt or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _download(url: str, dest: str, max_age_hours: float | None = None):
+def _http_date(value: str | None) -> datetime | None:
+    """An HTTP date header ("Sun, 25 Oct 2026 13:10:40 GMT") as an aware
+    datetime; None when missing or unreadable."""
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _download(url: str, dest: str, max_age_hours: float | None = None) -> datetime | None:
+    """Fetch url to dest. Returns the reply's Last-Modified date; None when
+    the server sent none, or when a recent copy was reused instead."""
     if max_age_hours is not None and os.path.exists(dest):
         age_h = (time.time() - os.path.getmtime(dest)) / 3600
         if age_h < max_age_hours:
             log.info("[uls] reusing %s (%.1f h old)", dest, age_h)
-            return
+            return None
     log.info("[uls] downloading %s …", url)
     s = get_settings()
     with httpx.stream("GET", url, timeout=60.0, follow_redirects=True,
                       headers={"User-Agent": s.http_user_agent}) as resp:
         resp.raise_for_status()
+        modified = _http_date(resp.headers.get("last-modified"))
         with open(dest + ".partial", "wb") as fh:
             for chunk in resp.iter_bytes(1 << 20):
                 fh.write(chunk)
     os.replace(dest + ".partial", dest)
     log.info("[uls] saved %s (%.1f MB)", dest, os.path.getsize(dest) / 1e6)
+    return modified
+
+
+def published_extract() -> datetime | None:
+    """When the FCC last published the weekly extract (it does on Sundays):
+    the Last-Modified date of a HEAD request for ULS_URL. None when the
+    request fails or the header is missing or unreadable."""
+    s = get_settings()
+    try:
+        resp = httpx.head(s.uls_url, timeout=30.0, follow_redirects=True,
+                          headers={"User-Agent": s.http_user_agent})
+        resp.raise_for_status()
+    except (httpx.HTTPError, httpx.InvalidURL) as exc:
+        log.warning("[uls] could not ask the FCC when its extract was published: %s", exc)
+        return None
+    published = _http_date(resp.headers.get("last-modified"))
+    if published is None:
+        log.info("[uls] the FCC's extract has no Last-Modified date")
+    return published
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +321,17 @@ def _ensure_aux_tables(conn):
         " last_try TEXT NOT NULL DEFAULT '')"))
     conn.execute(text(
         "CREATE TABLE IF NOT EXISTS places (zip TEXT PRIMARY KEY, place TEXT NOT NULL,"
-        " state TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, accuracy INTEGER)"))
+        " state TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, accuracy INTEGER,"
+        " key TEXT NOT NULL DEFAULT '')"))
+    if "key" not in {r[1] for r in conn.execute(text("PRAGMA table_info(places)"))}:
+        # place search matches this spelling-blind key (textcase.place_key)
+        log.info("[uls] migrating places table: adding 'key' column")
+        conn.execute(text("ALTER TABLE places ADD COLUMN key TEXT NOT NULL DEFAULT ''"))
+        rows = conn.execute(text("SELECT zip, place FROM places")).all()
+        if rows:
+            conn.execute(text("UPDATE places SET key = :key WHERE zip = :zip"),
+                         [{"zip": z, "key": place_key(p)} for z, p in rows])
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_places_key ON places (key)"))
     conn.execute(text(
         "CREATE TABLE IF NOT EXISTS zip_anchors (zip TEXT PRIMARY KEY, lat REAL NOT NULL,"
         " lon REAL NOT NULL, source TEXT NOT NULL, n_street INTEGER NOT NULL DEFAULT 0)"))
@@ -316,7 +368,10 @@ def migrate_users_table(bind=None):
     (create_all only adds missing tables). Idempotent; every existing member
     keeps the default 'address' (where they are shown today), gets a
     best-effort location_source once, when the column is added
-    (guess_location_sources), and is not asked to change their password."""
+    (guess_location_sources), and is not asked to change their password.
+    Once per database (PRAGMA user_version 1), names and addresses stored in
+    the callsign provider's capitals are put in normal case
+    (recase_member_capitals)."""
     with (bind or engine).begin() as conn:
         cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)"))]
         if cols and "map_precision" not in cols:
@@ -332,6 +387,33 @@ def migrate_users_table(bind=None):
             log.info("[users] migrating users table: adding 'must_change_password' column")
             conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL"
                               " DEFAULT 0"))
+        # one-off data fixes, counted in SQLite's user_version
+        done = conn.execute(text("PRAGMA user_version")).scalar() or 0
+        if cols and done < 1:
+            if {"name", "address_line", "city"} <= set(cols):
+                n = recase_member_capitals(conn)
+                if n:
+                    log.info("[users] %d member(s): name, street or city from the callsign provider's"
+                             " capitals now in normal case", n)
+            conn.execute(text("PRAGMA user_version = 1"))
+
+
+def recase_member_capitals(conn) -> int:
+    """Members' name, street and city as sign-up and Update from FCC stored
+    them from the callsign provider, in its capitals ("NEWINGTON", "225 MAIN
+    STREET", "ARRL HQ OPERATORS CLUB"), in normal case like the FCC
+    directory's (acronyms kept). Text with a lower-case letter in it was typed
+    by the member and is left alone. Returns the members changed."""
+    changed = []
+    for uid, name, street, city in conn.execute(text("SELECT id, name, address_line, city FROM users")).all():
+        values = [name, street, city]
+        fixed = [from_capitals(name or ""), from_capitals(street or ""), from_capitals(city or "", place=True)]
+        if fixed != [v or "" for v in values]:
+            changed.append({"id": uid, "name": fixed[0], "street": fixed[1], "city": fixed[2]})
+    if changed:
+        conn.execute(text("UPDATE users SET name = :name, address_line = :street, city = :city"
+                          " WHERE id = :id"), changed)
+    return len(changed)
 
 
 # a stored point "equals" a source's point within this many degrees (~1 cm):
@@ -464,6 +546,22 @@ def _rows_from_zip(zip_path: str, name: str):
 
 
 _ISO_CACHE: dict[str, str] = {}
+_CASE_CACHE: dict[tuple, str] = {}
+
+
+def _recase(s: str, kind: str = "name", region: str = "", inner: bool = False) -> str:
+    """A name or city field in normal case (textcase.tidy_case): the FCC's
+    capitals ("ARRL HQ OPERATORS CLUB" -> "ARRL HQ Operators Club", "PINE GRV
+    MLS" -> "Pine Grv Mls"), and what a licensee typed all in lower case or in
+    odd case ("taylorville", "ChARLES"); the rest of what a licensee wrote in
+    mixed case is kept. First names and cities repeat: memoised."""
+    key = (s, kind, region, inner)
+    out = _CASE_CACHE.get(key)
+    if out is None:
+        out = tidy_case(s, kind, region, inner)
+        if len(_CASE_CACHE) < 200_000:
+            _CASE_CACHE[key] = out
+    return out
 
 
 def iso_date(mdy: str) -> str:
@@ -504,11 +602,14 @@ def read_licenses(zip_path: str):
         if _first_line_fields(p, 1) != lic[0]:
             stale_en += 1  # a previous holder's license of this callsign
             continue
-        name = " ".join(x for x in (_first_line_fields(p, 8), _first_line_fields(p, 9),
-                                    _first_line_fields(p, 10)) if x) or _first_line_fields(p, 7)
-        info[cs] = (name.title().strip(", "),
-                    _first_line_fields(p, 15), _first_line_fields(p, 16).title(),
-                    _first_line_fields(p, 17).upper(), _first_line_fields(p, 18)[:5],
+        state = _first_line_fields(p, 17).upper()
+        # first name, middle initial and surname (which may start "de", "van"), else the club's name
+        name = " ".join(x for x in (_recase(_first_line_fields(p, 8)), _recase(_first_line_fields(p, 9), inner=True),
+                                    _recase(_first_line_fields(p, 10), inner=True)) if x) \
+            or _recase(_first_line_fields(p, 7), "org")
+        info[cs] = (name.strip(", "),
+                    _first_line_fields(p, 15), _recase(_first_line_fields(p, 16), "place", state),
+                    state, _first_line_fields(p, 18)[:5],
                     _first_line_fields(p, 14).lower())
     log.info("[uls] entity pass done (%.0fs total, %d rows of previous licenses skipped)",
              time.monotonic() - t0, stale_en)
@@ -820,6 +921,21 @@ def derived_tables_due() -> tuple[bool, bool, bool]:
     return agg_due, places_due, anchors_due
 
 
+PLACES_INSERT = ("INSERT OR IGNORE INTO places (zip, place, state, lat, lon, accuracy, key)"
+                 " VALUES (?, ?, ?, ?, ?, ?, ?)")
+
+
+def places_rows(gazetteer) -> list[tuple]:
+    """GeoNames rows (zip, place, state, lat, lon, accuracy) with the key
+    place search matches on (textcase.place_key)."""
+    return [(*row, place_key(row[1])) for row in gazetteer]
+
+
+def _replace_places(conn: sqlite3.Connection, gazetteer) -> None:
+    conn.execute("DELETE FROM places")
+    conn.executemany(PLACES_INSERT, places_rows(gazetteer))
+
+
 def _fill_places_and_anchors(places: bool, anchors: bool) -> None:
     """places from the GeoNames files (downloaded once, kept in the data
     dir) and ZIP anchors from the street-level rows already in hams."""
@@ -847,10 +963,7 @@ def _fill_places_and_anchors(places: bool, anchors: bool) -> None:
     try:
         with _txn(conn):
             if places:
-                conn.execute("DELETE FROM places")
-                conn.executemany("INSERT OR IGNORE INTO places (zip, place, state, lat, lon, accuracy)"
-                                 " VALUES (?, ?, ?, ?, ?, ?)", gazetteer)
-                conn.execute("CREATE INDEX IF NOT EXISTS ix_places_place ON places (place COLLATE NOCASE)")
+                _replace_places(conn, gazetteer)
             if anchors:
                 conn.execute("DELETE FROM zip_anchors")
                 conn.executemany("INSERT INTO zip_anchors (zip, lat, lon, source, n_street)"
@@ -909,8 +1022,9 @@ def import_hams(zip_path: str | None = None) -> int:
 
     s = get_settings()
     tmp_zip = zip_path or os.path.join(_data_dir(), "l_amat.zip")
+    extract_date = None
     if zip_path is None:
-        _download(s.uls_url, tmp_zip, max_age_hours=20)
+        extract_date = _download(s.uls_url, tmp_zip, max_age_hours=20)
 
     _ensure_geocode_table()
     gazetteer = load_gazetteer()
@@ -1014,10 +1128,7 @@ def import_hams(zip_path: str | None = None) -> int:
             conn.execute("ALTER TABLE hams_clusters_import RENAME TO hams_clusters")
             conn.execute("DROP TABLE IF EXISTS hams_changes")
             conn.execute("ALTER TABLE hams_changes_import RENAME TO hams_changes")
-            conn.execute("DELETE FROM places")
-            conn.executemany("INSERT OR IGNORE INTO places (zip, place, state, lat, lon, accuracy)"
-                             " VALUES (?, ?, ?, ?, ?, ?)", gazetteer)
-            conn.execute("CREATE INDEX IF NOT EXISTS ix_places_place ON places (place COLLATE NOCASE)")
+            _replace_places(conn, gazetteer)
             conn.execute("DELETE FROM zip_anchors")
             conn.executemany("INSERT INTO zip_anchors (zip, lat, lon, source, n_street)"
                              " VALUES (?, ?, ?, ?, ?)", [(z, *a) for z, a in anchors.items()])
@@ -1034,6 +1145,9 @@ def import_hams(zip_path: str | None = None) -> int:
             time.time() - os.path.getmtime(tmp_zip) > s.uls_refresh_days * 86400:
         os.remove(tmp_zip)  # stale extract; keep recent ones for re-imports
     _touch_marker()
+    if extract_date is not None:
+        # a reused copy (extract_date None) is the one the marker already names
+        _write_marker(_extract_marker_path(), extract_date)
     _sync_users()
     return count
 
@@ -1254,10 +1368,35 @@ def fetch_data_release() -> int:
                 os.remove(p)
 
 
+def new_extract_due(last: datetime) -> bool:
+    """Should the next import start now? The FCC publishes a new extract every
+    Sunday, so it is imported soon after (the scheduler asks daily) rather than
+    ULS_REFRESH_DAYS after the previous import, which left the directory up to
+    a week behind: when the FCC's Last-Modified date (published_extract) is
+    later than that of the extract the last import read — or, before that was
+    recorded, than the import itself. When the FCC gives no date,
+    ULS_REFRESH_DAYS after the last import, as before."""
+    published = published_extract()
+    if published is not None:
+        have = _read_marker(_extract_marker_path()) or last
+        if published > have:
+            log.info("[uls] the FCC published a new extract (%s; the last import read one from %s) — importing",
+                     _utc_stamp(published), _utc_stamp(have))
+            return True
+        return False
+    s = get_settings()
+    age_days = (datetime.now(timezone.utc) - last).total_seconds() / 86400
+    if age_days >= s.uls_refresh_days:
+        log.info("[uls] data is %.1f days old — refreshing", age_days)
+        return True
+    return False
+
+
 def ensure_fresh() -> bool:
     """Keep the hams table current and street-level:
 
-    1. import if the table is empty or stale (uses cached geocodes);
+    1. import if the table is empty or the FCC published a newer extract
+       (new_extract_due; uses cached geocodes);
     2. if many due addresses lack a geocode (or no release with Census
        matched addresses has been merged yet), merge the weekly data release
        (at most once per refresh period), then backfill the rest via the
@@ -1272,13 +1411,10 @@ def ensure_fresh() -> bool:
         return True
     ok = True
     last = last_import()
-    if last is not None:
-        age_days = (datetime.now(timezone.utc) - last).total_seconds() / 86400
-        if age_days >= s.uls_refresh_days:
-            log.info("[uls] data is %.1f days old — refreshing", age_days)
-            ok = _run_import()
-    else:
+    if last is None:
         log.info("[uls] no previous import — starting initial import")
+        ok = _run_import()
+    elif new_extract_due(last):
         ok = _run_import()
 
     def due() -> int:

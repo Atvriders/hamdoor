@@ -108,12 +108,15 @@ def wspr_spots(user: User = Depends(get_current_user)):
 
 @router.get("/dxcluster")
 def dxcluster_spots(user: User = Depends(get_current_user)):
-    """Live DX cluster spots sampled for a few seconds."""
+    """DX cluster spots, newest first: the node's latest (SH/DX) and those it
+    sends during a few seconds' live sample. `source` is the node that
+    answered (DXC_HOST, or a DXC_FALLBACKS node when that one sends no log-in
+    prompt)."""
     s = get_settings()
     ttl = max(30.0, s.activity_sample_seconds)
     spots = _answered("The DX cluster",
                       lambda: activity_cache.wrap("dxc", ttl, lambda: telnetfeed.sample_dxcluster(user.callsign)))
-    return {"source": f"{s.dxc_host}:{s.dxc_port}", "sample_seconds": s.activity_sample_seconds, "spots": spots}
+    return {"source": telnetfeed.dxc_source(), "sample_seconds": s.activity_sample_seconds, "spots": spots}
 
 
 @router.get("/rbn")

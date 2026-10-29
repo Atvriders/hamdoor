@@ -88,7 +88,8 @@
     if (p.lat == null || p.lon == null) return null;
     return HD.geo.gridCentre(HD.geo.toGrid(p.lat, p.lon, 6));
   }
-  const classBadge = (p) => HD.ui.classBadge(p.author_class ? p.author_class : null, !!p.author_new);
+  // author_class "" is a club licence (a "C" badge), null an author the FCC directory has no row for (an empty ring)
+  const classBadge = (p) => HD.ui.classBadge(p.author_class, !!p.author_new);
   const repliesText = (n) => (n ? `${n}${NB}${n === 1 ? "reply" : "replies"}` : "No replies yet");
 
   // ---------------------------------------------------------------- repeater chips (§7.5, matcher in hd-core: HD.repeaterChips)
@@ -415,7 +416,7 @@
     const [nb, rpt, bands, nets] = await Promise.allSettled([
       loadNeighbours(),
       HD.config.features && HD.config.features.repeaters
-        ? HD.api(`/api/repeaters/near?radius_km=${Math.min(500, Math.round(range * 1.609))}&limit=200`) : Promise.resolve(null),
+        ? HD.api(`/api/repeaters/near?radius_km=${Math.min(805, Math.round(range * 1.609344))}&limit=1`) : Promise.resolve(null),
       HD.api("/api/activity/bands"),
       HD.api("/api/posts/feed?category=nets-events"),
     ]);
@@ -423,9 +424,8 @@
     let html = `<section class="hd-aside__sec"><h2 class="hd-aside__h">Your neighbourhood</h2><dl class="hd-kv">
       <dt>Range</dt><dd>${range}${NB}miles${grid ? " of " + esc(grid) : ""}</dd>`;
     if (nb.status === "fulfilled") html += `<dt>On hamdoor</dt><dd>${HD.fmt.plural(nb.value.length, "neighbour")}</dd>`;
-    if (rpt.status === "fulfilled" && rpt.value) {
-      const n = (rpt.value.repeaters || []).length;
-      html += `<dt>Repeaters</dt><dd class="hd-num">${n >= 200 ? "200+" : n} listed</dd>`;
+    if (rpt.status === "fulfilled" && rpt.value && rpt.value.total != null) {
+      html += `<dt>Repeaters</dt><dd class="hd-num">${HD.fmt.num(rpt.value.total)} listed</dd>`; // every one in range, as Activity
     }
     html += `</dl></section>`;
     if (bands.status === "fulfilled" && bands.value) html += bandsAside(bands.value);
@@ -509,8 +509,15 @@
   function renderThread(focus) {
     const id = st.threadId;
     if (!id) return;
+    // "Show on map" only for a post that is there to show (its list copy will do while the thread loads): for a post
+    // that is deleted, out of range or failed to load it did nothing
+    const t = st.threads.get(id);
+    const p = t && !t.post && t.error ? null : findPost(id);
+    const mappable = !!(p && postPlace(p));
     if (st.mode === "thread") {
       const body = el.querySelector("[data-thread-body]");
+      const mapBtn = el.querySelector("[data-threadpage] [data-post-map]");
+      if (mapBtn) mapBtn.hidden = !mappable;
       withFocus(() => { body.innerHTML = threadInner(id, "page"); });
       fillChips(body);
       if (focus) focusThread("page");
@@ -519,7 +526,7 @@
       withFocus(() => {
         box.innerHTML = `<div class="hd-thread" role="region" aria-labelledby="thread-h">
         <div class="hd-thread__head"><h2 class="hd-thread__h" id="thread-h" tabindex="-1">Post and replies</h2>
-          <span class="hd-thread__actions"><button class="hd-btn hd-btn--quiet hd-btn--sm" type="button" data-post-map="${id}">${icon("map", { size: 20 })}Show on map</button>
+          <span class="hd-thread__actions">${mappable ? `<button class="hd-btn hd-btn--quiet hd-btn--sm" type="button" data-post-map="${id}">${icon("map", { size: 20 })}Show on map</button>` : ""}
           <a class="hd-iconbtn hd-iconbtn--wash" href="${HD.router.href("feed", st.filter)}" data-thread-close aria-label="Close">${icon("close", { size: 24 })}</a></span></div>
         ${threadInner(id, "column")}</div>`;
       });
@@ -543,7 +550,10 @@
       let target = null;
       if (st.reply) target = el.querySelector(`#reply-${st.threadId}`);
       if (!target) target = mode === "page" ? el.querySelector("[data-thread-body] .hd-post__title") : el.querySelector("#thread-h");
-      if (target) target.focus({ preventScroll: mode !== "page" || !st.reply });
+      if (target) { target.focus({ preventScroll: mode !== "page" || !st.reply }); return; }
+      // a phone thread page without its post (deleted, out of range, failed): what it says instead, or Try again,
+      // so focus never stays on the page body
+      if (mode === "page") HD.focusTo(el.querySelector("[data-thread-body] [data-retry-thread], [data-thread-body] .hd-empty__title"));
     });
   }
 
@@ -566,12 +576,13 @@
     const leavingThread = !!(prevThread && prevThread !== threadId && (focusLost() || inThread(document.activeElement)));
     if (threadId && !desk && prevMode === "list" && st.listShown) st.feedScroll = window.scrollY;
     st.cameFromList = threadId && prevMode === "list" && st.listShown ? true : threadId ? st.cameFromList : false;
+    let filterChanged = false;
     if (!threadId) {
       const f = { category: params.category || "", author: (params.author || "").toUpperCase() };
       if (f.category && !HD.ui.CATEGORIES.some((c) => c.id === f.category)) f.category = "";
-      const changed = listKey(f) !== listKey(st.filter);
+      filterChanged = listKey(f) !== listKey(st.filter);
       st.filter = f;
-      if (changed) st.announceNext = true;
+      if (filterChanged) st.announceNext = true;
     }
     st.threadId = threadId;
     st.reply = params.reply === "1";
@@ -597,9 +608,12 @@
       } else {
         renderAside();
       }
-      // scroll: back from a phone thread page -> where the feed was; from another tab -> its own position
+      // scroll: another category or author -> the new list's top (its newest posts and the composer; the old position
+      // left a desktop list scrolled to its end); back from a phone thread page -> where the feed was; from another tab
+      // -> its own position
       let y = null;
-      if (prevMode === "thread" && !threadId) y = st.feedScroll;
+      if (filterChanged) y = 0;
+      else if (prevMode === "thread" && !threadId) y = st.feedScroll;
       else if (!st.listShown) y = st.viewScroll;
       if (y != null) restoreScroll(y);
       st.listShown = true;

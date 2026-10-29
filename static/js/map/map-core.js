@@ -673,19 +673,25 @@
     renderQueued = true;
     requestAnimationFrame(() => { renderQueued = false; M.renderAll(); });
   };
-  /** Every layer renders in order (licences first, so people and activators can ride
-   *  postmark rims), marks are diffed by key, then labels are laid out once. */
+  /** Every layer renders in order (licences first, so people, activators and repeaters can
+   *  ride the rims of the counts under them), marks are diffed by key, then labels are laid out once. */
   M.renderAll = () => {
     if (!M.map || !M.T) return;
     const z = M.map.getZoom();
     document.body.dataset.zoomband = z < M.MINZ.fccDots ? "area" : "street";
+    // postmarks and zipGroups: {x, y, r} of every count bubble and ZIP group drawn, in container pixels; labelRows: the
+    // rows "You" and each neighbour's callsign may take, either side of the mark (layer-people.js), which a repeater
+    // cap riding a count's rim keeps off (layer-repeaters.js)
     const ctx = M.ctx = { zoom: z, tone: M.tone, T: M.T, prefs: M.prefs, sel: M.ui ? M.ui.selection() : null,
-      toPoint: (lat, lon) => M.map.latLngToContainerPoint([lat, lon]), bounds: M.map.getBounds(), postmarks: [], rim: null };
+      toPoint: (lat, lon) => M.map.latLngToContainerPoint([lat, lon]), bounds: M.map.getBounds(), postmarks: [], zipGroups: [],
+      labelRows: [], rim: null };
     for (const st of M.layerList) {
       const on = M.isOn(st.id);
       if (st.id === "members") ctx.rim = M.marks.makeRim(ctx);
       let desired = new Map();
       if ((on || st.def.alwaysRender) && st.def.render) { try { desired = st.def.render(st.data, ctx, st) || desired; } catch (e) { console.error("[hd] map layer", st.id, e); } }
+      // the selected station is never drawn under your dot: one your dot would cover rides your rim (map-marks.js)
+      if (ctx.rim && st.id !== "members") for (const d of desired.values()) if (d.always) { const a = ctx.rim.offYou(d); if (a) d.anchor = a; }
       M.marks.syncMarkers(st.store, desired);
       if (st.def.canvas) { try { st.def.canvas(on ? st.data : null, ctx, st); } catch (e) { console.error("[hd] map canvas", st.id, e); } }
     }

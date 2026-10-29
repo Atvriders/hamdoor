@@ -68,8 +68,8 @@ def nearby(
             lon=lon,
             distance_miles=dist,
             map_precision="address" if shows_exact_location(other) else "grid",
-            license_class=badges.get(other.callsign, ("", False))[0],
-            new=badges.get(other.callsign, ("", False))[1],
+            license_class=badges.get(other.callsign, (None, False))[0],
+            new=badges.get(other.callsign, (None, False))[1],
         )
         for other, lat, lon, grid, dist in found
     ]

@@ -284,6 +284,46 @@ def test_security_headers_and_pinned_swagger_page(client):
     assert client.get("/api/openapi.json").status_code == 200
 
 
+def test_hsts_only_on_https(client):
+    """QA BE-5: no Strict-Transport-Security, so a first plain-HTTP visit
+    could be stripped of TLS. It goes on HTTPS answers only — directly, or
+    behind a proxy that says so (X-Forwarded-Proto, Cloudflare's CF-Visitor)
+    — never on plain HTTP, where browsers ignore it anyway."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    hsts = "strict-transport-security"
+    for path in ("/", "/api/health", "/static/js/hd-core.js", "/api/nope"):
+        assert hsts not in client.get(path).headers, path
+        r = client.get(path, headers={"X-Forwarded-Proto": "https"})
+        assert r.headers[hsts] == "max-age=31536000", path
+        assert r.headers["x-frame-options"] == "DENY"  # the other headers stay
+    assert hsts in client.get("/", headers={"CF-Visitor": '{"scheme":"https"}'}).headers
+    assert hsts in client.get("/", headers={"X-Forwarded-Proto": "https, http"}).headers  # the first hop
+    assert hsts not in client.get("/", headers={"X-Forwarded-Proto": "http"}).headers
+    assert hsts not in client.get("/", headers={"CF-Visitor": '{"scheme":"http"}'}).headers
+    tls = TestClient(app, base_url="https://testserver")  # served over TLS itself
+    assert tls.get("/static/favicon.svg").headers[hsts] == "max-age=31536000"
+
+
+def test_web_fonts_are_served_with_their_types(client, monkeypatch):
+    """QA BE-6: the python:3.11-slim image has no /etc/mime.types and Python's
+    own table has no .woff2: fonts went out as application/octet-stream, and
+    were gzipped again on the way."""
+    import mimetypes
+
+    from app import main
+
+    monkeypatch.setattr(mimetypes, "_db", mimetypes.MimeTypes())  # Python's own table only, as in the image
+    main.register_web_types()
+    r = client.get("/static/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2",
+                   headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200 and r.headers["content-type"] == "font/woff2"
+    assert "content-encoding" not in r.headers  # already compressed: sent as is
+    assert mimetypes.guess_type("x.woff")[0] == "font/woff"
+
+
 # ---------------------------------------------------------------- PRIV-02 posts out of range
 
 

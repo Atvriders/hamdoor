@@ -260,6 +260,19 @@ def test_callook_parses_coordinates():
     assert CallookProvider._parse("w1aw", half).lat is None
 
 
+def test_callook_capitals_are_stored_in_normal_case():
+    """QA F6: callook writes names and addresses in capitals; sign-up and
+    Update from FCC stored them verbatim ("NEWINGTON, Connecticut" on the QSL
+    card, "ARRL HQ OPERATORS CLUB" in Nearby)."""
+    rec = CallookProvider._parse("w1aw", W1AW_JSON)
+    assert (rec.name, rec.address_line, rec.city) == ("ARRL HQ Operators Club", "225 Main St", "Newington")
+    assert (rec.state, rec.zip, rec.grid) == ("CT", "06111", "FN31pr")
+    mixed = dict(W1AW_JSON, name="Hiram Percy Maxim Memorial Station",
+                 address={"line1": "225 Main St", "line2": "Newington, CT 06111"})
+    rec = CallookProvider._parse("w1aw", mixed)
+    assert (rec.name, rec.city) == ("Hiram Percy Maxim Memorial Station", "Newington")
+
+
 def test_callook_lookup_reads_location_over_http():
     def handler(request):
         assert request.url.path == "/W1AW/json"

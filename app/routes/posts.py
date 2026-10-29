@@ -20,7 +20,7 @@ from app.security import get_current_user
 router = APIRouter(prefix="/api", tags=["posts"])
 
 PAGE_SIZE = 20
-_NO_BADGE = ("", False)
+_NO_BADGE = (None, False)  # no FCC row: class not listed (null), not a club ("")
 
 
 def comment_out(c: Comment) -> CommentOut:
@@ -46,7 +46,7 @@ def post_place(p: Post) -> tuple[float | None, float | None, str]:
 
 
 def post_out(p: Post, viewer: User | None = None, with_comments: bool = False,
-             badge: tuple[str, bool] = _NO_BADGE) -> PostOut:
+             badge: tuple[str | None, bool] = _NO_BADGE) -> PostOut:
     """`badge` = the author's (licence class, new-ham flag), see fcc_badges."""
     lat, lon, grid = post_place(p)
     dist = None
@@ -75,7 +75,7 @@ def post_out(p: Post, viewer: User | None = None, with_comments: bool = False,
     )
 
 
-def _author_badge(db: Session, p: Post) -> tuple[str, bool]:
+def _author_badge(db: Session, p: Post) -> tuple[str | None, bool]:
     return fcc_badges(db, [p.author.callsign]).get(p.author.callsign, _NO_BADGE)
 
 

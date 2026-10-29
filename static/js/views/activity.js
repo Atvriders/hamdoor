@@ -2,8 +2,9 @@
    Bands | Near me (Repeaters, APRS) | Spots (Parks, Summits, DX cluster) | My signal (PSK Reporter, WSPR, CW skimmers).
    Route #/activity/<tab> (?src= picks a source). Each tab remembers its source for the session. Activity never
    polls: data loads when a tab or source opens (if older than its rule allows) and on Refresh.
-   Errors (§13, gap G11 shipped): no answer at all -> "Couldn't reach hamdoor"; 502 -> the upstream did not answer;
-   another 5xx -> hamdoor or the upstream may be busy. An empty list now really means nothing came back. */
+   Errors (§13, gap G11 shipped): no answer at all -> "Couldn't reach hamdoor"; 502 -> the upstream did not answer,
+   and so does a 5xx that is not hamdoor's JSON (a proxy's page in its place); another 5xx -> hamdoor or the upstream
+   may be busy. An empty list now really means nothing came back. */
 (function () {
   "use strict";
   const HD = window.HD;
@@ -38,6 +39,8 @@
   const me = () => HD.session.user || {};
   const myCall = () => (me().callsign || "").toUpperCase();
   const rangeMi = () => me().range_miles || 25;
+  // the whole range in km for /api/repeaters/near, which counts up to 805 km (500 miles, the widest range)
+  const rangeKm = () => Math.min(805, Math.round(rangeMi() * 1.609344));
   const features = () => (HD.config && HD.config.features) || {};
   const aprsMiles = () => {
     if (st.ctl.aprsMi) return st.ctl.aprsMi;
@@ -61,7 +64,7 @@
         if (st.ctl.bands["2m"]) tokens.push("2m");
         if (st.ctl.bands["70cm"]) tokens.push("70cm");
         if (st.ctl.bands.other) tokens.push("10m", "6m", "1.25m", "33cm", "23cm", "other");
-        const q = `radius_km=${Math.min(500, Math.round(rangeMi() * 1.609))}&limit=50` + (all ? "" : `&bands=${tokens.join(",")}`);
+        const q = `radius_km=${rangeKm()}&limit=50` + (all ? "" : `&bands=${tokens.join(",")}`);
         return { key: "rpt:" + q, url: "/api/repeaters/near?" + q, none: !on.length };
       }
       case "aprs": {
@@ -209,15 +212,21 @@
 
   function rowsRpt(raw) {
     const list = raw.repeaters || [];
-    return `<ul class="hd-list">${list.map((r) => {
+    // the meta line wraps rather than cutting off the mode, which decides whether you can use the machine; the
+    // callsign and each mode never break ("D-STAR"), and the lead column fits a 220 cap (app.css)
+    return `<ul class="hd-list hd-list--rpt">${list.map((r) => {
       const mi = r.distance_km != null ? r.distance_km / 1.609344 : null;
       const tone = HD.ui.rpt.tone(r);
       const where = r.city ? r.city + (r.location_quality && r.location_quality !== "site" ? " area" : "") : "";
-      const meta = [r.callsign, where, HD.ui.rpt.modes(r)].filter(Boolean).map(esc).join(", ");
+      const nowrap = (t) => `<span class="hd-nowrap">${esc(t)}</span>`;
+      const meta = [r.callsign && nowrap(r.callsign), where && esc(where), HD.ui.rpt.modes(r).split(", ").map(nowrap).join(", ")]
+        .filter(Boolean).join(", ");
+      // a machine at your own spot has no direction (the bearing of one point to itself is a made-up north)
+      const dir = mi != null && mi >= HD.geo.SAME_SPOT_MI ? HD.fmt.compass(r.bearing_deg) : "";
       const href = HD.router.href("map", { lat: r.lat.toFixed(5), lon: r.lon.toFixed(5), z: 14, sel: "rpt:" + r.id });
       return `<li><a class="hd-row" href="${href}"><span class="hd-row__lead">${HD.ui.rpt.cap(r)}</span>
         <span class="hd-row__title"><span class="hd-row__f">${esc(HD.ui.rpt.line(r))}</span>${tone ? `<span class="hd-row__tone">${esc(tone)}</span>` : ""}</span>
-        <span class="hd-row__meta">${meta}</span><span class="hd-row__trail">${esc(HD.fmt.mi(mi))}</span><span class="hd-row__trail2">${esc(HD.fmt.compass(r.bearing_deg))}</span></a></li>`;
+        <span class="hd-row__meta">${meta}</span><span class="hd-row__trail">${esc(HD.fmt.mi(mi))}</span><span class="hd-row__trail2">${esc(dir)}</span></a></li>`;
     }).join("")}</ul>`;
   }
   function rowsAprs(raw) {
@@ -307,7 +316,7 @@
       case "sota": return st.ctl.potaNear
         ? [`No summit activations within ${range}${NB}miles came back from SOTAwatch for the last 2${NB}hours.`, "Summit activations cluster on weekends."]
         : [`No summit activations came back from SOTAwatch for the last 2${NB}hours.`, "Summit activations cluster on weekends."];
-      case "dx": return ["No DX spots arrived during this 15-second sample.", "Refresh to listen again."];
+      case "dx": return ["No DX spots came back from the DX cluster.", "Refresh to listen again."];
       case "psk": return st.ctl.psk === "sent"
         ? [`No reports of ${call} came back from PSK Reporter for the last 24${NB}hours.`, "It lists digital modes such as FT8, FT4 and PSK31. Call CQ, then refresh."]
         : [`No reception reports by ${call} came back from PSK Reporter for the last 24${NB}hours.`, "They appear when your receiving software reports to PSK Reporter."];
@@ -321,13 +330,19 @@
   function statusText(src, raw, n) {
     const range = rangeMi();
     switch (src) {
-      case "rpt": return `${plural(n, "repeater", "repeaters")} within ${range}${NB}miles, nearest first.`;
+      case "rpt": {
+        // the request asks for the nearest 50; total counts every listed repeater in range
+        const total = raw.total != null ? raw.total : n;
+        return total > n ? `The nearest ${HD.fmt.num(n)} of ${plural(total, "repeater", "repeaters")} within ${range}${NB}miles.`
+          : `${plural(n, "repeater", "repeaters")} within ${range}${NB}miles, nearest first.`;
+      }
       case "aprs": return raw.mode === "sample"
         ? `${plural(n, "station", "stations")} within ${aprsMiles()}${NB}miles in a 15-second sample.`
         : `${plural(n, "station", "stations")} within ${aprsMiles()}${NB}miles, heard in the last hour.`;
       case "pota": return `${plural(n, "park activation", "park activations")} spotted${st.ctl.potaNear ? ` within ${range}${NB}miles` : ""}, nearest first.`;
-      case "sota": return `${plural(n, "summit activation", "summit activations")} spotted${st.ctl.potaNear ? ` within ${range}${NB}miles` : ""}, nearest first.`;
-      case "dx": return `${plural(n, "spot", "spots")} in a 15-second live sample.`;
+      // SOTAwatch lists every spot of the last 2 hours, one per QSY: they are spots, not activations
+      case "sota": return `${plural(n, "summit spot", "summit spots")}${st.ctl.potaNear ? ` within ${range}${NB}miles` : ""}, nearest first.`;
+      case "dx": return `${plural(n, "spot", "spots")} from the DX cluster, newest first.`;
       case "psk": {
         const spots = raw.spots || [];
         if ((raw.direction || st.ctl.psk) === "sent") {
@@ -348,7 +363,7 @@
       case "aprs": return "Live from APRS-IS (aprs2.net), received by this hamdoor server.";
       case "pota": return "Spots from pota.app, refreshed every minute.";
       case "sota": return `Spots from SOTAwatch (sota.org.uk), last 2${NB}hours.`;
-      case "dx": return `From a DX cluster (telnet), sampled for 15${NB}seconds when you open or refresh it.`;
+      case "dx": return `From a DX cluster (telnet): its latest spots, and those that arrive in 15${NB}seconds of listening when you open or refresh it.`;
       case "psk": return "Reception reports from pskreporter.info, refreshed every minute.";
       case "wspr": return `From wspr.live, last 24${NB}hours.`;
       case "rbn": return `From the Reverse Beacon Network (telnet), sampled for 15${NB}seconds when you open or refresh it.`;
@@ -362,10 +377,13 @@
   }
   function errorHtml(src, err) {
     const s = err && err.status;
+    // the source didn't answer: hamdoor's JSON 502 (G11), or a proxy's own page in its place — Cloudflare swaps that 502
+    // for its HTML "Bad gateway", and answers 504 or 52x when a sample outlasts it. This view knows which source it asked.
+    const noAnswer = s === 502 || (s > 500 && err.notJson);
     let title, body;
     if (!s) { title = "Couldn't reach hamdoor"; body = "Check your connection and try again."; }
-    else if (src === "bands" && s === 502) { title = "Couldn't load band conditions from hamqsl.com"; body = "Try again in a few minutes."; }
-    else if (s === 502) { title = `Couldn't load from ${NAME[src]}`; body = `${NAME[src].replace(/^the /, "The ")} didn't answer. Try again in a minute.`; }
+    else if (src === "bands" && noAnswer) { title = "Couldn't load band conditions from hamqsl.com"; body = "Try again in a few minutes."; }
+    else if (noAnswer) { title = `Couldn't load from ${NAME[src]}`; body = `${NAME[src].replace(/^the /, "The ")} didn't answer. Try again in a minute.`; }
     else if (s === 429) { title = "That's busy right now"; body = "Try again in a minute."; }
     else if (s >= 500) { title = `Couldn't load from ${NAME[src]}`; body = `hamdoor or ${NAME[src]} may be busy. Try again in a minute.`; }
     else { title = `Couldn't load from ${NAME[src]}`; body = esc(HD.errorText(err)); }

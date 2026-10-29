@@ -1,4 +1,5 @@
-"""Background scheduler: keeps the FCC ULS hams table fresh (weekly)."""
+"""Background scheduler: keeps the FCC ULS hams table fresh (each weekly
+extract, soon after the FCC publishes it)."""
 
 import logging
 import threading
@@ -42,12 +43,13 @@ def start_uls_scheduler() -> threading.Thread | None:
                 complete = False
                 log.exception("[uls] refresh check failed")
             # incomplete work (throttled geocoder, failed download) → retry in
-            # 30 min; otherwise normal daily check
+            # 30 min; otherwise the next check (by default daily) asks the FCC
+            # whether a new extract is out
             time.sleep(3600 * (s.uls_check_interval_hours if complete else 0.5))
 
     thread = threading.Thread(target=loop, daemon=True, name="uls-scheduler")
     thread.start()
-    log.info("[uls] scheduler started (refresh every %d days)", s.uls_refresh_days)
+    log.info("[uls] scheduler started (asks the FCC for a new extract every %d h)", s.uls_check_interval_hours)
     return thread
 
 

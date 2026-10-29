@@ -4,6 +4,9 @@ No network access happens in these tests.
 """
 
 import socket
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -741,3 +744,203 @@ def test_is_connected_reads_the_running_feed(monkeypatch):
 
     monkeypatch.setattr(aprs_feed, "_feed", _F())
     assert aprs_feed.is_connected() is True
+
+
+# ---------------------------------------------------------------- QA F1: the DX cluster node and its fallbacks
+
+AR_PROMPT = (b"Welcome to NC7J, running AR-Cluster 6.6.186.\r\n"
+             b"!          Warning: This system may only be accessed by Radio         !\r\n"
+             b"Enter your callsign\r\n\r\nlogin: ")
+
+
+def _listed(dx, khz, hhmm, spotter, comment=""):
+    """One line of an SH/DX answer (AR-Cluster's layout)."""
+    return f"{khz:>8.1f}  {dx:<11} 28-Oct-2026 {hhmm}Z  {comment:<28} <{spotter}>\r\n".encode()
+
+
+def _dx_de(spotter, khz, dx, hhmm, comment=""):
+    return f"DX de {spotter + ':':<10} {khz:>8.1f}  {dx:<12} {comment:<30} {hhmm}Z\r\n".encode()
+
+
+@pytest.mark.parametrize("line, want", [
+    (" 14025.0  K1XYZ       28-Oct-2026 0123Z  CW op nr               <W1AAA>",      # AR-Cluster
+     ("W1AAA", 14025.0, "K1XYZ", "CW op nr", "0123Z")),
+    ("  14074.0  9Y4DG       28-Oct-2026 1925Z  FT8 -12dB from FK90    <KC4ZV>",      # DXSpider
+     ("KC4ZV", 14074.0, "9Y4DG", "FT8 -12dB from FK90", "1925Z")),
+    ("  3505.0 K1TTT       26-Jan-2008 0244Z                              <W3LPL>",  # no comment
+     ("W3LPL", 3505.0, "K1TTT", "", "0244Z")),
+])
+def test_sh_dx_answer_lines_parse_like_spots(line, want):
+    spot = telnetfeed.parse_spot_line(line)
+    assert (spot["spotter"], spot["frequency_khz"], spot["dx_callsign"], spot["comment"], spot["time"]) == want
+    for other in ("W1AW de NC7J 28-Oct-2026 2001Z arc >", "login: ", "Enter your callsign",
+                  "14 users online <NC7J>", "WWV de K1ABC <01Z> : geomagnetic storm"):
+        assert telnetfeed.parse_spot_line(other) is None
+
+
+def test_dx_spots_come_newest_first_and_once():
+    now = datetime(2026, 10, 28, 18, 23, tzinfo=timezone.utc)
+    listed = [telnetfeed.parse_spot_line(_listed(dx, 14025.0, t, "W1AAA").decode()) for dx, t in
+              (("K1NEW", "1820"), ("K1MID", "1815"), ("K1OLD", "1810"))]
+    live = [telnetfeed.parse_spot_line(_dx_de("W1BBB", 7010.0, dx, t).decode()) for dx, t in
+            (("K2LIVE", "1821"), ("K2LATE", "1824"))]       # 1824Z: the node's clock runs a minute fast
+    again = telnetfeed.parse_spot_line(_dx_de("W1AAA", 14025.0, "K1MID", "1815").decode())  # also listed
+    got = telnetfeed._newest_first(listed + live + [again], now=now)
+    assert [s["dx_callsign"] for s in got] == ["K2LATE", "K2LIVE", "K1NEW", "K1MID", "K1OLD"]
+    # across midnight
+    late = [telnetfeed.parse_spot_line(_listed(dx, 14025.0, t, "W1AAA").decode()) for dx, t in
+            (("K1A", "0004"), ("K1B", "2359"))]
+    assert [s["dx_callsign"] for s in telnetfeed._newest_first(late, now=now.replace(hour=0, minute=5))] == ["K1A", "K1B"]
+
+
+@pytest.fixture()
+def dx_nodes(monkeypatch):
+    """Scripted DX cluster nodes by host (a script for _ScriptedSocket, or an
+    exception the connection raises); returns {host: socket} as they connect."""
+    s = get_settings()
+    monkeypatch.setattr(s, "dxc_host", "dead.example")
+    monkeypatch.setattr(s, "dxc_port", 23)
+    monkeypatch.setattr(s, "dxc_fallbacks", "live.example:7373, spare.example:7300")
+    monkeypatch.setattr(s, "activity_sample_seconds", 15.0)
+    monkeypatch.setattr(telnetfeed, "_dxc_last", {"node": None, "until": 0.0})
+    clock = _fake_clock(monkeypatch, telnetfeed)
+    socks, scripts = {}, {}
+
+    def connect(address, timeout=None):
+        item = scripts[address[0]]
+        if isinstance(item, BaseException):
+            raise item
+        socks[address[0]] = _ScriptedSocket(list(item), clock)
+        socks.setdefault("_order", []).append(address[0])
+        return socks[address[0]]
+
+    monkeypatch.setattr(telnetfeed, "socket", SimpleNamespace(create_connection=connect, timeout=socket.timeout))
+    return SimpleNamespace(scripts=scripts, socks=socks, clock=clock)
+
+
+def test_a_node_that_sends_no_login_prompt_is_passed_over(dx_nodes):
+    """QA F1: ve7cc.net:23 (the default) accepts the connection and never
+    sends a log-in prompt, so every request waited out the whole sample and
+    answered 502. A node silent for PROMPT_SECONDS is now passed over for the
+    next one, which is asked for its latest spots at once (SH/DX)."""
+    now = datetime.now(timezone.utc)
+    hhmm = lambda minutes_ago: (now - timedelta(minutes=minutes_ago)).strftime("%H%M")
+    dx_nodes.scripts["dead.example"] = [None] * 30                     # connects, says nothing
+    dx_nodes.scripts["live.example"] = [
+        AR_PROMPT,
+        _listed("K1NEW", 14025.0, hhmm(3), "W1AAA", "CW") + _listed("K1OLD", 21074.0, hhmm(9), "W1BBB", "FT8"),
+        _dx_de("W1CCC", 7010.0, "K2LIVE", hhmm(0), "CW 599"),
+    ]
+    t0 = dx_nodes.clock["t"]
+    spots = telnetfeed.sample_dxcluster("W1AW")
+    assert [s["dx_callsign"] for s in spots] == ["K2LIVE", "K1NEW", "K1OLD"]
+    assert dx_nodes.socks["_order"] == ["dead.example", "live.example"]
+    assert dx_nodes.socks["dead.example"].sent == []                  # never logged in there
+    assert dx_nodes.socks["live.example"].sent == [b"W1AW\r\n", b"set/ft8\r\n", b"sh/dx 30\r\n"]
+    assert telnetfeed.dxc_source() == "live.example:7373"
+    # the dead node cost PROMPT_SECONDS, then the live one the sample
+    assert dx_nodes.clock["t"] - t0 <= telnetfeed.PROMPT_SECONDS + 1 + 15
+    # the next request asks the node that answered first
+    dx_nodes.socks["_order"].clear()
+    dx_nodes.scripts["live.example"] = [AR_PROMPT, _listed("K1NEW", 14025.0, hhmm(3), "W1AAA")]
+    assert [s["dx_callsign"] for s in telnetfeed.sample_dxcluster("W1AW")] == ["K1NEW"]
+    assert dx_nodes.socks["_order"] == ["live.example"]
+
+
+def test_dx_cluster_fails_only_when_every_node_failed(dx_nodes):
+    dx_nodes.scripts["dead.example"] = ConnectionRefusedError("refused")
+    dx_nodes.scripts["live.example"] = [b"Welcome\r\n"] + [None] * 30   # a banner, but no prompt
+    dx_nodes.scripts["spare.example"] = socket.timeout("timed out")
+    with pytest.raises(UpstreamError) as exc:
+        telnetfeed.sample_dxcluster("W1AW")
+    assert "dead.example:23" in str(exc.value) and "live.example:7373: no log-in prompt" in str(exc.value)
+    assert dx_nodes.socks["_order"] == ["live.example"]  # (the others never connected)
+
+
+def test_dx_route_names_the_node_that_answered(client, token, dx_nodes, monkeypatch):
+    monkeypatch.setattr(activity_routes, "activity_cache", common.TTLCache())
+    dx_nodes.scripts["dead.example"] = [None] * 30
+    dx_nodes.scripts["live.example"] = [AR_PROMPT, _dx_de("W1CCC", 7010.0, "K2LIVE", "1200", "CW")]
+    r = client.get("/api/activity/dxcluster", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["source"] == "live.example:7373"
+    assert [s["dx_callsign"] for s in r.json()["spots"]] == ["K2LIVE"]
+
+
+class _FakeTelnetNode:
+    """A DX cluster node on 127.0.0.1 for one test. prompt=None is a node that
+    accepts the connection and never says a word (ve7cc.net:23 in 2026);
+    otherwise it prompts, records each line it is sent, answers SH/DX with
+    `listed` and then sends `live`, and stays connected."""
+
+    def __init__(self, prompt=AR_PROMPT, listed=b"", live=b""):
+        self.prompt, self.listed, self.live, self.got = prompt, listed, live, []
+        self.srv = socket.create_server(("127.0.0.1", 0))
+        self.port = self.srv.getsockname()[1]
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        try:
+            conn, _ = self.srv.accept()
+        except OSError:
+            return
+        with conn:
+            conn.settimeout(10)
+            try:
+                if self.prompt is not None:
+                    conn.sendall(self.prompt)
+                buf = b""
+                while chunk := conn.recv(1024):
+                    buf += chunk
+                    while b"\r\n" in buf:
+                        line, buf = buf.split(b"\r\n", 1)
+                        self.got.append(line.decode())
+                        if line.lower().startswith(b"sh/dx"):
+                            conn.sendall(self.listed)
+                            conn.sendall(self.live)
+            except OSError:
+                pass
+
+    def close(self):
+        self.srv.close()
+
+
+def test_dx_cluster_against_fake_telnet_servers(monkeypatch):
+    """F1 end to end over real sockets: a silent node, then an AR-Cluster
+    lookalike that answers SH/DX and sends a spot live."""
+    now = datetime.now(timezone.utc)
+    hhmm = lambda minutes_ago: (now - timedelta(minutes=minutes_ago)).strftime("%H%M")
+    silent = _FakeTelnetNode(prompt=None)
+    node = _FakeTelnetNode(listed=_listed("K1NEW", 14025.0, hhmm(2), "W1AAA", "CW")
+                           + _listed("K1OLD", 21074.0, hhmm(20), "W1BBB", "FT8 -12dB"),
+                           live=_dx_de("W1CCC", 7010.0, "K2LIVE", hhmm(0), "CW 599"))
+    s = get_settings()
+    monkeypatch.setattr(s, "dxc_host", "127.0.0.1")
+    monkeypatch.setattr(s, "dxc_port", silent.port)
+    monkeypatch.setattr(s, "dxc_fallbacks", f"127.0.0.1:{node.port}")
+    monkeypatch.setattr(s, "activity_sample_seconds", 1.0)
+    monkeypatch.setattr(telnetfeed, "PROMPT_SECONDS", 0.5)
+    monkeypatch.setattr(telnetfeed, "_dxc_last", {"node": None, "until": 0.0})
+    try:
+        t0 = time.monotonic()
+        spots = telnetfeed.sample_dxcluster("W1AW")
+        took = time.monotonic() - t0
+    finally:
+        silent.close()
+        node.close()
+    assert [sp["dx_callsign"] for sp in spots] == ["K2LIVE", "K1NEW", "K1OLD"]
+    assert node.got == ["W1AW", "set/ft8", "sh/dx 30"]
+    assert telnetfeed.dxc_source() == f"127.0.0.1:{node.port}"
+    assert took < 8  # the silent node cost about one receive timeout, not a whole sample
+
+
+def test_dxc_fallbacks_are_read_as_host_port_pairs(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "dxc_host", "ve7cc.net")
+    monkeypatch.setattr(s, "dxc_port", 23)
+    monkeypatch.setattr(s, "dxc_fallbacks", " dxc.nc7j.com:7373, ve7cc.net:23,nonsense  dxc.example.org:7300 [::1]:7000,")
+    assert telnetfeed.dxc_nodes() == [("ve7cc.net", 23), ("dxc.nc7j.com", 7373), ("dxc.example.org", 7300), ("::1", 7000)]
+    monkeypatch.setattr(s, "dxc_fallbacks", "")
+    assert telnetfeed.dxc_nodes() == [("ve7cc.net", 23)]
+    # the defaults: an AR-Cluster node that prompts at once, and itself as the fallback
+    assert (type(s)().dxc_host, type(s)().dxc_port, type(s)().dxc_fallbacks) == ("dxc.nc7j.com", 7373, "dxc.nc7j.com:7373")

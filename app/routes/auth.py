@@ -19,6 +19,7 @@ from app.schemas import (
     UserSelf,
 )
 from app.security import create_token, hash_password, is_admin, verify_password
+from app.textcase import from_capitals
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ def signup(
         ham = db.get(Ham, body.callsign)
         if ham is not None:
             record = CallsignRecord(
-                callsign=ham.callsign, name=ham.name, address_line=ham.street,
+                callsign=ham.callsign, name=ham.name, address_line=from_capitals(ham.street),
                 city=ham.city, state=ham.state, zip=ham.zip,
                 license_class=ham.license_class, expires=ham.expires,
                 source="FCC ULS (weekly snapshot)",

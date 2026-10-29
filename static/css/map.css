@@ -93,6 +93,18 @@
 .hd-mk-rpt { width: max-content; }
 .hd-mk-rpt > * { flex: none; }
 
+/* a culled assembly keeps its first cap and, beside it, "+19" for its other machines, like a compact row (§3.3), so
+   a city-centre listing of 20 never reads as one repeater. The placer hides the "+19" where it does not fit
+   (hd-culled-bare, map-marks.js). */
+.hd-mk-rpt .hd-mk-rpt__n { display: none; }
+.hd-culled .hd-mk-rpt { flex-direction: row; align-items: center; gap: 3px; }
+.hd-culled .hd-mk-rpt .hd-mk-rpt__n { display: inline-grid; }
+.hd-culled-bare .hd-mk-rpt .hd-mk-rpt__n { display: none; }
+
+/* "You" flipped: it ends --you-lbl-l from your dot, so below z10 it clears your metro's postmark on the left as it
+   does on the right (map-marks.js makeRim); 10 px from z10 */
+.hd-flip .hd-mk-you .hd-lbl { right: calc(100% + var(--you-lbl-l, 10px)); }
+
 /* a selected post or activator moves its label clear of the selection ring (30 px plus its bands reach 22 px from the
    mark's centre), as a selected APRS pill moves out (§3.4, §3.6); flipped labels move out on the left */
 .hd-mk-post.is-selected .hd-lbl { left: calc(100% + 10px); }

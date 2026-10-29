@@ -83,7 +83,7 @@
     // repeater chips (§7.5) come from the shell's shared matcher; a chip opens the repeater's card on the map
     const chips = it.chips || "";
     return `${K.head(`<span style="display:block">${K.postSvg(p.category, 40)}</span>`, esc(p.title), "hd-detail__title")}
-      <div class="hd-post__from" style="margin-top:12px">${K.classBadge(p.author_class || "", !!p.author_new)}<span class="hd-call hd-post__call">${esc(p.author_callsign)}</span><span class="hd-post__name">${esc(M.firstName(p.author_name))}</span><span class="hd-post__dist">${authorDist(p)}</span></div>
+      <div class="hd-post__from" style="margin-top:12px">${K.classBadge(p.author_class, !!p.author_new)}<span class="hd-call hd-post__call">${esc(p.author_callsign)}</span><span class="hd-post__name">${esc(M.firstName(p.author_name))}</span><span class="hd-post__dist">${authorDist(p)}</span></div>
       <div class="hd-post__meta">${K.glyph(glyph, 20)}<span>${esc(catLabel)}</span><time>${esc(M.ago(p.created_at))}</time></div>
       ${p.body ? `<p class="hd-post__body hd-post__clamp" style="margin-top:12px">${esc(p.body)}</p>` : ""}
       ${when || chips ? `<div class="hd-post__when">${when ? `${M.ic("clock", 20)}<span>${esc(when)}</span>` : ""}${chips}</div>` : ""}

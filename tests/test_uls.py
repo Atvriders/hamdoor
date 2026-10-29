@@ -20,6 +20,8 @@ from app.integrations.census_geocoder import GeocodeHit, address_key
 from app.models import Geocode, Ham, User
 from tests.conftest import signup
 
+_PUBLISHED_EXTRACT = uls.published_extract  # the real one (the autouse fixture stubs it)
+
 
 @pytest.fixture(autouse=True)
 def _hermetic(tmp_path, monkeypatch):
@@ -32,6 +34,8 @@ def _hermetic(tmp_path, monkeypatch):
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_network)
     monkeypatch.setattr(census_geocoder.time, "sleep", lambda s: None)
+    # the FCC's publication date is unknown unless a test serves one (BE-4 tests below)
+    monkeypatch.setattr(uls, "published_extract", lambda: None)
 
 
 def _line(*fields_by_index, total):
@@ -293,7 +297,7 @@ def test_places_table_built_at_import(mini_uls_zip, db):
     uls.import_hams(zip_path=mini_uls_zip)
     with engine.begin() as conn:
         rows = {r.zip: tuple(r) for r in conn.execute(text("SELECT * FROM places"))}
-    assert rows["66210"] == ("66210", "Overland Park", "KS", 38.93, -94.69, 4)
+    assert rows["66210"] == ("66210", "Overland Park", "KS", 38.93, -94.69, 4, "overlandpark")  # + search key
     assert rows["00725"][2] == "PR"
 
 
@@ -446,6 +450,8 @@ def test_lookup_falls_back_to_local_uls(client, mini_uls_zip, db):
     assert data["found"] is True
     assert data["email"] == "w1qqq@example.com"
     assert "ULS" in data["source"]
+    # QA F6: the importer keeps the FCC's street as written ("10 OAK ST"); sign-up gets normal case
+    assert data["address_line"] == "10 Oak St" and data["city"] == "Newington"
 
 
 # ---------------------------------------------------------------- Census batch
@@ -936,3 +942,206 @@ def test_members_who_edited_their_address_are_not_labelled_licence(db, monkeypat
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM hams WHERE callsign IN ('AC0MKA', 'AC0MKB')"))
         conn.execute(text("DELETE FROM users WHERE callsign IN ('AC0MKA', 'AC0MKB')"))
+
+
+# ---------------------------------------------------------------- QA F7: acronyms survive the import
+
+
+def test_imported_names_and_cities_keep_their_acronyms(tmp_path, gazetteer, db):
+    """QA F7: str.title() made W1AW "Arrl Hq Operators Club" and W1HQ "Arrl
+    Radio Laboratory"; what a licensee wrote in mixed case is kept as written."""
+    path = write_uls_zip(
+        tmp_path / "acr.zip",
+        [hd("1", "W1AW"), hd("2", "W1HQ"), hd("3", "K1MIX"), hd("4", "K1JR")],
+        [en("1", "W1AW", "225 MAIN ST", "NEWINGTON", "CT", "06111", entity="ARRL HQ OPERATORS CLUB"),
+         en("2", "W1HQ", "225 Main Street", "NEWINGTON", "CT", "06111", entity="ARRL RADIO LABORATORY"),
+         en("3", "K1MIX", "1 ELM ST", "Hartford", "CT", "06103", first="Mary", last="McDonald"),
+         en("4", "K1JR", "2 ELM ST", "HARTFORD", "CT", "06103", first="JOHN", mi="Q", last="O'BRIEN III")],
+        [am("1", "W1AW", ""), am("2", "W1HQ", ""), am("3", "K1MIX", "G"), am("4", "K1JR", "E")])
+    uls.import_hams(zip_path=path)
+    assert (db.get(Ham, "W1AW").name, db.get(Ham, "W1AW").city) == ("ARRL HQ Operators Club", "Newington")
+    assert db.get(Ham, "W1HQ").name == "ARRL Radio Laboratory"
+    assert (db.get(Ham, "K1MIX").name, db.get(Ham, "K1MIX").city) == ("Mary McDonald", "Hartford")
+    assert db.get(Ham, "K1JR").name == "John Q O'Brien III"
+
+
+def test_imported_names_and_cities_typed_in_lower_or_odd_case_or_postal_abbreviations(tmp_path, gazetteer, db):
+    """QA R1: the acronym-safe title case changed only text in capitals, so
+    what licensees typed in lower case stayed so ("william T douglass",
+    "taylorville": 708 names and 3,799 cities that str.title() had fixed),
+    odd case stayed ("ChARLES", "WRIGHt"), the FCC's postal abbreviations
+    stayed in capitals ("Pine GRV MLS", "El Dorado HLS") and a club's acronym
+    turned up in a town ("Des ARC")."""
+    rows = [  # callsign, (first, mi, last) or entity, city, state
+        ("N9TOP", ("Sue", "I", "Goodin"), "taylorville", "IL"),
+        ("W0WTD", ("william", "T", "douglass"), "Saint Paul", "MN"),
+        ("KO6LQR", ("tracy", "", "orvik"), "Morgan Hill", "CA"),
+        ("K7CCW", ("ChARLES", "C", "Edgar"), "Tigard", "OR"),
+        ("KN0WHF", ("REYNOLD", "D", "WRIGHt"), "BLOOMFIELD HiLLS", "MI"),
+        ("KO6MLB", ("donald", "m", "mclean"), "Pleasant view", "UT"),
+        ("WL7CPG", ("Richard", "M", "o Connor"), "Anchorage", "AK"),
+        ("K7VMI", ("Allen", "L", "de Steiguer"), "Coeur d Alene", "ID"),
+        ("KJ5BTH", ("Mildred", "M", "ODonnell"), "OFallon", "MO"),
+        ("KC3UAS", ("ERIK", "", "LENZING"), "PINE GRV MLS", "PA"),
+        ("WB6OGD", ("GARY", "A", "WINBLAD"), "EL DORADO HLS", "CA"),
+        ("KF0IMK", ("CHRIS", "M", "CUNNINGHAM"), "HGHLNDS RANCH", "CO"),
+        ("K5PQ", ("LEE", "", "PARKER"), "DES ARC", "AR"),
+        ("KE2BFZ", ("Sony", "", "Sinha"), "JOINT BASE MDL", "NJ"),
+        ("K0IG", ("Joe", "", "Smith"), "austin, tx", "TX"),
+        ("W4FTK", "FleetTalk Amateur Radio Group", "Pismo BEACH", "CA"),
+        ("W1AW", "ARRL HQ OPERATORS CLUB", "NEWINGTON", "CT"),
+    ]
+    ens = []
+    for i, (call, name, city, st) in enumerate(rows, 1):
+        parts = dict(entity=name) if isinstance(name, str) else dict(zip(("first", "mi", "last"), name))
+        ens.append(en(str(i), call, f"{i} ELM ST", city, st, "06111", **parts))
+    path = write_uls_zip(tmp_path / "case.zip", [hd(str(i), r[0]) for i, r in enumerate(rows, 1)], ens,
+                         [am(str(i), r[0], "G") for i, r in enumerate(rows, 1)])
+    uls.import_hams(zip_path=path)
+    got = {r[0]: (db.get(Ham, r[0]).name, db.get(Ham, r[0]).city) for r in rows}
+    assert got == {
+        "N9TOP": ("Sue I Goodin", "Taylorville"),
+        "W0WTD": ("William T Douglass", "Saint Paul"),
+        "KO6LQR": ("Tracy Orvik", "Morgan Hill"),
+        "K7CCW": ("Charles C Edgar", "Tigard"),
+        "KN0WHF": ("Reynold D Wright", "Bloomfield Hills"),
+        "KO6MLB": ("Donald M McLean", "Pleasant View"),
+        "WL7CPG": ("Richard M O Connor", "Anchorage"),
+        "K7VMI": ("Allen L de Steiguer", "Coeur d Alene"),       # particles as written
+        "KJ5BTH": ("Mildred M ODonnell", "OFallon"),             # O' without the apostrophe
+        "KC3UAS": ("Erik Lenzing", "Pine Grv Mls"),
+        "WB6OGD": ("Gary A Winblad", "El Dorado Hls"),
+        "KF0IMK": ("Chris M Cunningham", "Hghlnds Ranch"),
+        "K5PQ": ("Lee Parker", "Des Arc"),
+        "KE2BFZ": ("Sony Sinha", "Joint Base MDL"),
+        "K0IG": ("Joe Smith", "Austin, TX"),                     # the licence's own state
+        "W4FTK": ("FleetTalk Amateur Radio Group", "Pismo Beach"),
+        "W1AW": ("ARRL HQ Operators Club", "Newington"),
+    }
+
+
+# ---------------------------------------------------------------- QA F6: members in the provider's capitals
+
+
+def test_members_stored_in_the_providers_capitals_are_recased_once(tmp_path):
+    """QA F6: sign-up and Update from FCC stored callook's capitals verbatim
+    ("NEWINGTON, Connecticut" on the QSL card, "JOHN" in Nearby). Existing
+    rows are put in normal case once; what a member typed in mixed case, and
+    anything typed after the upgrade, is left alone."""
+    from sqlalchemy import create_engine
+
+    path = tmp_path / "members.db"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, callsign TEXT, name TEXT NOT NULL DEFAULT '',"
+                " address_line TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '')")
+    con.executemany("INSERT INTO users (callsign, name, address_line, city) VALUES (?, ?, ?, ?)", [
+        ("W1HQ", "ARRL RADIO LABORATORY", "225 MAIN STREET", "NEWINGTON"),
+        ("K1ABC", "John Smith", "12 Elm St", "West Hartford"),       # typed by the member
+        ("K1DEF", "JOHN Q SMITH JR", "1ST AVE NE", "St. Louis"),     # mixed: only the capitals change
+        ("K1GHI", "", "", ""),
+        ("K3UAS", "ERIK LENZING", "4 ELM ST", "PINE GRV MLS"),         # a town as the FCC prints it (QA R1)
+    ])
+    con.commit()
+    con.close()
+    eng = create_engine(f"sqlite:///{path}")
+    uls.migrate_users_table(eng)
+
+    def rows():
+        c = sqlite3.connect(path)
+        try:
+            return {r[0]: r[1:] for r in c.execute("SELECT callsign, name, address_line, city FROM users")}
+        finally:
+            c.close()
+
+    assert rows() == {
+        "W1HQ": ("ARRL Radio Laboratory", "225 Main Street", "Newington"),
+        "K1ABC": ("John Smith", "12 Elm St", "West Hartford"),
+        "K1DEF": ("John Q Smith Jr", "1st Ave NE", "St. Louis"),
+        "K1GHI": ("", "", ""),
+        "K3UAS": ("Erik Lenzing", "4 Elm St", "Pine Grv Mls"),
+    }
+    c = sqlite3.connect(path)
+    c.execute("UPDATE users SET name = 'BOB' WHERE callsign = 'K1ABC'")  # typed later, on purpose
+    c.commit()
+    c.close()
+    uls.migrate_users_table(eng)  # the next start: done already
+    assert rows()["K1ABC"][0] == "BOB"
+
+
+# ---------------------------------------------------------------- QA BE-4: import when the FCC publishes
+
+
+def _serve_head(monkeypatch, answer):
+    """HEAD requests answered by `answer(request)` (an httpx.Response or an exception)."""
+    seen = []
+
+    def handle(self, request):
+        seen.append(request)
+        out = answer(request)
+        if isinstance(out, Exception):
+            raise out
+        return out
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle)
+    return seen
+
+
+def test_published_extract_is_the_last_modified_date_of_a_head_request(monkeypatch):
+    seen = _serve_head(monkeypatch, lambda r: httpx.Response(
+        200, headers={"Last-Modified": "Sun, 25 Oct 2026 13:10:40 GMT"}))
+    assert _PUBLISHED_EXTRACT() == datetime(2026, 10, 25, 13, 10, 40, tzinfo=timezone.utc)
+    assert [(r.method, str(r.url)) for r in seen] == [("HEAD", get_settings().uls_url)]
+    for answer in (lambda r: httpx.Response(200),                                   # no header
+                   lambda r: httpx.Response(200, headers={"Last-Modified": "soon"}),  # unreadable
+                   lambda r: httpx.Response(503),
+                   lambda r: httpx.ConnectError("no route", request=r)):
+        _serve_head(monkeypatch, answer)
+        assert _PUBLISHED_EXTRACT() is None
+
+
+def test_a_new_extract_is_imported_soon_after_the_fcc_publishes_it(mini_uls_zip, tmp_path, db, monkeypatch):
+    """QA BE-4: imports ran ULS_REFRESH_DAYS after the previous one, so the
+    directory lagged the FCC's Sunday extract by 6-13 days. ensure_fresh now
+    asks the FCC (a HEAD request, daily) and imports when its extract is newer
+    than the one the last import read; without a date, the old timer."""
+    _clear_geocodes(db)
+    s = get_settings()
+    monkeypatch.setattr(s, "uls_import_enabled", True)
+    monkeypatch.setattr(s, "data_release_enabled", False)
+    sunday1 = datetime(2026, 10, 18, 13, 5, tzinfo=timezone.utc)
+    sunday2 = datetime(2026, 10, 25, 13, 10, 40, tzinfo=timezone.utc)
+    fcc = {"date": sunday1}
+    downloads = []
+
+    def fake_download(url, dest, max_age_hours=None):
+        downloads.append(url)
+        shutil.copy(mini_uls_zip, dest)
+        return fcc["date"]  # the GET's Last-Modified
+
+    monkeypatch.setattr(uls, "_download", fake_download)
+    monkeypatch.setattr(uls, "published_extract", lambda: fcc["date"])
+    assert uls.ensure_fresh() is True and len(downloads) == 1          # the first import
+    assert uls._read_marker(str(tmp_path / ".uls_extract")) == sunday1
+    assert uls.ensure_fresh() is True and len(downloads) == 1          # same extract: nothing to do
+    fcc["date"] = sunday2
+    assert uls.ensure_fresh() is True and len(downloads) == 2          # the FCC published: import now
+    assert uls._read_marker(str(tmp_path / ".uls_extract")) == sunday2
+    assert uls.ensure_fresh() is True and len(downloads) == 2
+    # the FCC gives no date: ULS_REFRESH_DAYS after the last import, as before
+    fcc["date"] = None
+    assert uls.ensure_fresh() is True and len(downloads) == 2
+    aged = datetime.now(timezone.utc) - timedelta(days=s.uls_refresh_days, minutes=1)
+    (tmp_path / ".uls_last_import").write_text(aged.isoformat())
+    assert uls.ensure_fresh() is True and len(downloads) == 3
+
+
+def test_an_import_from_before_extract_dates_were_kept_compares_its_own_date(tmp_path, monkeypatch):
+    """The live case: the last import (Oct 23) read the Oct 18 extract and no
+    extract date was recorded; the FCC's Oct 25 extract is due at once, one
+    published before that import is not."""
+    imported = datetime(2026, 10, 23, 18, 57, 39, tzinfo=timezone.utc)
+    (tmp_path / ".uls_last_import").write_text(imported.isoformat())
+    monkeypatch.setattr(uls, "published_extract", lambda: datetime(2026, 10, 25, 13, 10, 40, tzinfo=timezone.utc))
+    assert uls.new_extract_due(uls.last_import()) is True
+    monkeypatch.setattr(uls, "published_extract", lambda: datetime(2026, 10, 18, 13, 5, tzinfo=timezone.utc))
+    assert uls.new_extract_due(uls.last_import()) is False

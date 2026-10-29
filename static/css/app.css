@@ -9,6 +9,13 @@
 /* ---------- shell ---------- */
 .hd-main:focus, .hd-main:focus-visible { outline: none; box-shadow: none; } /* focused only to move focus out of chrome or skip to content */
 .hd-view:focus { outline: none; }
+/* Keyboard focus is never hidden under the bars (§11, WCAG 2.2 SC 2.4.11): a list page scrolls what takes focus clear
+   of its top bar (fixed on phones, sticky on desktop; hd-chrome.js publishes the visible one's height as
+   --hd-scroll-top) and, on phones, of the tab bar. Tabbing down a phone list hid every third row under the tab bar. */
+html { scroll-padding: calc(var(--hd-scroll-top, 0px) + var(--hd-sp-3)) 0 calc(var(--hd-safe-bottom) + var(--hd-sp-3)); }
+@media (max-width: 1023.98px) and (min-height: 500px) {
+  html { scroll-padding-bottom: calc(var(--hd-tab-h) + var(--hd-safe-bottom) + var(--hd-sp-3)); }
+}
 /* Sign up and Log in sit outside the signed-in shell: no rail, no tab bar (§7.14) */
 .hd-app[data-route="auth"] .hd-rail,
 .hd-app[data-route="auth"] .hd-tabbar { display: none; }
@@ -145,6 +152,11 @@ a.hd-spot:hover { background: var(--hd-fill-subtle); }
 .hd-spot__call--you { color: var(--hd-member); }
 .hd-row .hd-mk-aprs { display: block; cursor: inherit; }
 .hd-row__lead .hd-mk-rpt__cap { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 5px; border-radius: var(--hd-r-mark); font: var(--hd-w-heavy) 13px/1 var(--hd-font); }
+/* Repeater rows: the lead column is as wide as a 220 cap (in the cap's own type: three digits and its padding), with
+   each cap centred in it, so every row's frequency and meta start at the same place (a 220 row's started 9 px to the
+   right); and the meta wraps rather than cut off the mode at 320 px (activity.js keeps the callsign and each mode whole) */
+.hd-list--rpt .hd-row__lead { display: grid; justify-items: center; width: calc(3ch + 10px); font: var(--hd-w-heavy) 13px/1 var(--hd-font); }
+.hd-list--rpt .hd-row__meta { white-space: normal; overflow: visible; text-overflow: clip; }
 .hd-row__f { font-size: var(--hd-fs-20); font-weight: var(--hd-w-heavy); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hd-row__tone { font-weight: var(--hd-w-medium); white-space: nowrap; }
 .hd-outlook td:first-child { white-space: nowrap; }

@@ -7,6 +7,7 @@ from app.integrations.provider import CallsignProvider, get_provider
 from app.models import Ham
 from app.routes.hams import is_new_ham
 from app.schemas import LookupResponse, normalize_callsign
+from app.textcase import from_capitals
 
 router = APIRouter(prefix="/api/lookup", tags=["lookup"])
 
@@ -49,7 +50,7 @@ def lookup(
             found=True,
             callsign=cs,
             name=ham.name,
-            address_line=ham.street,
+            address_line=from_capitals(ham.street),  # the importer keeps the FCC's street as written
             city=ham.city,
             state=ham.state,
             zip=ham.zip,

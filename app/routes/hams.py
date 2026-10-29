@@ -328,8 +328,9 @@ def _by_class(counts: dict) -> dict:
 
 def fcc_badges(db: Session, callsigns) -> dict[str, tuple[str, bool]]:
     """{callsign: (license_class, new)} from the FCC directory — the class
-    badge and new-ham star of members and post authors. Callsigns without a
-    directory row are left out (callers show "" / false)."""
+    badge and new-ham star of members and post authors ("" is a club licence).
+    Callsigns without a directory row are left out (callers send null /
+    false: "not listed", never a club)."""
     calls = sorted({c for c in callsigns if c})
     out: dict[str, tuple[str, bool]] = {}
     for i in range(0, len(calls), 500):  # stay far below SQLite's parameter limit

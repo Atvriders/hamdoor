@@ -9,8 +9,10 @@
      focus survive every pan (§9.4)
    - the label placer: one greedy pass per moveend over a 48 px occupancy grid,
      chrome first, then marks, DOM labels by priority, FCC dots, shared-address
-     tags and canvas callsigns (§9.2)
-   - the rim allocator for marks riding postmarks below z10 (§3.2)
+     tags and canvas callsigns (§9.2); "You" and the selected station are placed
+     together, so they keep clear of each other
+   - the rim allocator for marks riding postmarks below z10, and for a selected
+     station your dot would cover (§3.2)
    - the selection ring, and the HTML of marks, badges and card parts. */
 (function () {
   "use strict";
@@ -227,8 +229,11 @@
     if (!prim && ok(ovl)) h += `<span class="hd-mk-aprs__ovl" style="${sz}background-position:${pos(ovl)}"></span>`;
     return h;
   };
-  /** The class badge: a ring in the class colour around the letter; a star outline when new (§7.5). */
+  /** The class badge: a ring in the class colour around the letter; a star outline when new (§7.5). `cls` null or
+   *  undefined = unknown (a member the FCC directory has no row for): an empty Other ring, as HD.ui.classBadge draws
+   *  it in the Feed; "" is a club licence, "C". */
   K.classBadge = (cls, isNew) => {
+    if (cls == null) return '<span class="hd-class hd-class--o" title="Licence class not listed"></span>';
     const g = M.grp(cls || "").toLowerCase(), letter = M.letterOf(cls || "");
     if (isNew) return `<span class="hd-class hd-class--${g} hd-class--new" title="Newly licensed ${M.esc(M.classShort(cls || ""))}"><svg viewBox="-16 -16 32 32" aria-hidden="true"><path d="${K.starPath(15, 0.56)}" style="fill:var(--hd-surface);stroke:var(--c)" stroke-width="3" stroke-linejoin="round"/></svg><span>${letter}</span></span>`;
     return `<span class="hd-class hd-class--${g}" title="${M.esc(M.classShort(cls || ""))}">${letter}</span>`;
@@ -332,11 +337,39 @@
       return false;
     }
     add(b) { for (const k of this.keys(b)) { let a = this.cells.get(k); if (!a) this.cells.set(k, (a = [])); a.push(b); } }
+    /** the area a box shares with what is placed (each box once; chrome counts four times: a label under chrome is gone) */
+    cover(b, self) {
+      let area = 0;
+      const seen = new Set();
+      for (const k of this.keys(b)) {
+        const a = this.cells.get(k);
+        if (a) for (const o of a) {
+          if (seen.has(o) || (self && o.src === self)) continue;
+          seen.add(o);
+          const w = Math.min(b[2], o[2]) - Math.max(b[0], o[0]), h = Math.min(b[3], o[3]) - Math.max(b[1], o[1]);
+          if (w > 0 && h > 0) area += w * h * (o.chrome ? 4 : 1);
+        }
+      }
+      return area;
+    }
   }
   K.Occ = Occ;
-  let labelCanvas = null;
+  /** the area two lists of boxes share */
+  const shared = (as, bs) => { let s = 0; for (const a of as) for (const b of bs) { const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]); if (w > 0 && h > 0) s += w * h; } return s; };
+  let labelCanvas = null, measureCtx = null;
   const widths = new Map();
   K.clearWidths = () => widths.clear();
+  /** the width of text in a canvas font ("800 15px <family>"), cached like the FCC callsigns' widths */
+  K.textWidth = (font, text) => {
+    let w = widths.get(font + text);
+    if (w == null) {
+      if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+      measureCtx.font = font;
+      w = measureCtx.measureText(text).width;
+      widths.set(font + text, w);
+    }
+    return w;
+  };
   K.hideLabels = () => { if (labelCanvas) labelCanvas.style.visibility = "hidden"; };
   const roundRect = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
   const LABEL_SEL = ".hd-lbl, .hd-pill, .hd-mk-rpt__plate, .hd-mk-rpt__tag + .hd-mk-rpt__tag, .hd-mk-rpt__more";
@@ -350,12 +383,12 @@
     const rel = (r) => [r.left - mr.left, r.top - mr.top, r.right - mr.left, r.bottom - mr.top];
     const occ = new Occ();
     // 1. chrome is occupied: no label is drawn where a control sits
-    for (const r of K.chromeRects()) { const b = rel(r); occ.add([b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2]); }
+    for (const r of K.chromeRects()) { const b = rel(r), c = [b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2]; c.chrome = true; occ.add(c); }
     // 2. every DOM mark's own box, postmarks and ZIP groups. Reads and writes are batched (one layout
-    // for the plain boxes, one for the flipped ones), never interleaved per mark.
+    // for the plain boxes, one for the flipped ones, one for culled assemblies), never interleaved per mark.
     const all = [], dom = [];
     for (const st of M.layerList) for (const m of st.store.values()) { const el = m.getElement(); if (el) all.push({ m, el, d: m._hd }); }
-    for (const it of all) it.el.classList.remove("hd-culled", "hd-flip");
+    for (const it of all) it.el.classList.remove("hd-culled", "hd-flip", "hd-culled-bare");
     const measure = (lbls) => lbls.map((l) => rel(l.getBoundingClientRect())).filter((b) => b[2] > b[0] && b[3] > b[1]);
     for (const it of all) {
       const b = rel(it.el.getBoundingClientRect()); b.src = it.el; occ.add(b);
@@ -366,30 +399,70 @@
       it.boxes = measure(it.lbls);
       dom.push(it);
     }
-    // every label may try the other side (§9.2), "You" and the selected one too: "always" means never hidden, so they
-    // take the right, else the left, else the right anyway
+    // every label may try the other side (§9.2), "You" and the selected one too
     const flippable = dom.filter((it) => !it.d.noFlip);
     for (const it of flippable) it.el.classList.add("hd-flip");
     for (const it of flippable) it.flipped = measure(it.lbls);
     for (const it of flippable) it.el.classList.remove("hd-flip");
+    // a culled assembly keeps its first cap and says how many more machines it stands for ("+19"), where that fits
+    const counted = dom.filter((it) => (it.more = it.el.querySelector(".hd-mk-rpt__n")));
+    for (const it of counted) it.el.classList.add("hd-culled");
+    for (const it of counted) it.moreBox = measure([it.more])[0];
+    for (const it of counted) it.el.classList.remove("hd-culled");
     // 3. DOM labels in priority order: You, the selected station, neighbours, APRS (freshest first), repeaters, activators, post titles
     dom.sort((a, b) => a.pri - b.pri);
-    const fits = (boxes, el) => boxes.every((b) => b[0] >= 0 && b[2] <= size.x && b[1] >= 0 && b[3] <= size.y) && boxes.every((b) => !occ.hits(b, el));
-    const flip = [], cull = [];
+    const onScreen = (b) => b[0] >= 0 && b[2] <= size.x && b[1] >= 0 && b[3] <= size.y;
+    // the selection ring is drawn above every label (hd-sel pane, §3.6) and belongs to its mark: no other mark's
+    // label goes under it, so a plate hanging below a selected ZIP group flips or culls instead (§9.2 step 2). The
+    // canvas labels after this keep off it on their own (the selected licence's callsign and count tag).
+    const ring = K.selRing();
+    const underRing = (b, el) => !!ring && el !== ring.own
+      && Math.hypot(M.clamp(ring.cx, b[0], b[2]) - ring.cx, M.clamp(ring.cy, b[1], b[3]) - ring.cy) < ring.R;
+    const fits = (boxes, el) => boxes.every(onScreen) && boxes.every((b) => !occ.hits(b, el) && !underRing(b, el));
+    // each label tries the right, then the left (preferLeft: a moving APRS station heading east, whose course
+    // triangle would sit under its own pill, tries the left first)
+    const sidesOf = (it) => {
+      const sides = [[it.boxes, false]];
+      if (it.flipped) { if (it.d.preferLeft) sides.unshift([it.flipped, true]); else sides.push([it.flipped, true]); }
+      return sides;
+    };
+    const flip = [], cull = [], bare = [];
+    const place = (it, side) => { side[0].forEach((b) => occ.add(b)); if (side[1]) flip.push(it.el); };
+    // You and the selected station are never hidden, and they keep clear of each other: they are placed together, You
+    // first. Each takes the first side that fits; when the selection fits on neither side of the "You" that took its
+    // place, "You" moves to its other side; when nothing fits, the pair of sides that covers the least: chrome and the
+    // screen edge count four times, the two labels over each other eight times (§9.2, §3.2)
+    const offScreen = (b) => (b[2] - b[0]) * (b[3] - b[1]) - Math.max(0, Math.min(b[2], size.x) - Math.max(b[0], 0)) * Math.max(0, Math.min(b[3], size.y) - Math.max(b[1], 0));
+    const always = dom.filter((it) => it.d.always);
+    if (always.length) {
+      const area = (b) => (b[2] - b[0]) * (b[3] - b[1]);
+      const opts = always.map((it) => sidesOf(it).map((side) => ({ side, cost: side[0].reduce((s, b) => s + occ.cover(b, it.el) + 4 * offScreen(b) + (underRing(b, it.el) ? 4 * area(b) : 0), 0) })));
+      let best = null;
+      const walk = (i, chosen, cost) => {
+        if (best && cost >= best.cost) return;
+        if (i === always.length) { best = { cost, chosen: chosen.slice() }; return; }
+        for (const o of opts[i]) {
+          let c = cost + o.cost;
+          for (const p of chosen) c += 8 * shared(o.side[0], p.side[0]);
+          chosen.push(o); walk(i + 1, chosen, c); chosen.pop();
+        }
+      };
+      walk(0, [], 0);
+      always.forEach((it, i) => place(it, best.chosen[i].side));
+    }
     for (const it of dom) {
       const { el, d } = it;
-      if (!d.always && z < (d.minZ || 0)) { cull.push(el); continue; }
-      // each label tries the right, then the left (preferLeft: a moving APRS station heading east, whose course
-      // triangle would sit under its own pill, tries the left first)
-      const sides = [[it.boxes, false]];
-      if (it.flipped) { if (d.preferLeft) sides.unshift([it.flipped, true]); else sides.push([it.flipped, true]); }
-      const ok = sides.find(([boxes]) => fits(boxes, el)) || (d.always ? sides[0] : null); // You and the selection are never hidden
-      if (!ok) { cull.push(el); continue; } // a culled repeater assembly keeps its first cap
-      ok[0].forEach((b) => occ.add(b));
-      if (ok[1]) flip.push(el);
+      if (d.always) continue;
+      if (z < (d.minZ || 0)) { cull.push(el); continue; }
+      const ok = sidesOf(it).find(([boxes]) => fits(boxes, el));
+      if (ok) { place(it, ok); continue; }
+      cull.push(el); // a culled repeater assembly keeps its first cap, and its "+19" where that fits
+      if (it.moreBox && fits([it.moreBox], el)) occ.add(it.moreBox);
+      else if (it.more) bare.push(el);
     }
     for (const el of flip) el.classList.add("hd-flip");
     for (const el of cull) el.classList.add("hd-culled");
+    for (const el of bare) el.classList.add("hd-culled-bare");
     // canvas: shared-address tags, then FCC callsigns
     if (!labelCanvas) labelCanvas = L.DomUtil.create("canvas", "hd-labelcanvas", map.getPane("hd-labels"));
     L.DomUtil.setPosition(labelCanvas, map.containerPointToLayerPoint([0, 0]));
@@ -410,28 +483,33 @@
     // 4. FCC dots' own boxes (each knows its dot: a count tag sits up and right of its own dot, touching it, and
     // must only give way to other marks and labels)
     for (const { it, p, r } of inView) { const b = [p.x - r - 1, p.y - r - 1, p.x + r + 1, p.y + r + 1]; b.src = it; occ.add(b); }
+    // the selected licence or shared address keeps its callsign and its count tag, both set just outside its selection
+    // ring (§3.6) (matched by callsign: /api/hams/{call} answers full precision, /api/hams/map rounds to 6 decimals)
+    const sel = M.ui ? M.ui.selection() : null;
+    const selFcc = sel && sel.layer === "fcc" && (sel.kind === "fcc" || sel.kind === "addr") ? sel : null;
+    const selCalls = selFcc ? new Set(selFcc.kind === "fcc" ? [selFcc.h.callsign] : selFcc.hams.map((h) => h.callsign)) : null;
+    const isSel = (it) => !!selFcc && (selCalls.has(it.call) || (Math.abs(it.latlng[0] - selFcc.lat) < 2e-6 && Math.abs(it.latlng[1] - selFcc.lon) < 2e-6));
+    // the ring's outer band ends d/2 + 7 px out: a tag whose inner corner sits 1 px beyond it, on the diagonal
+    const ringOut = selFcc ? Math.ceil(((((M.ui.ringFor(selFcc) || {}).d) || 30) / 2 + 8) / Math.SQRT2) : 0;
     ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-    // shared-address tags: a quiet 16 px paper tag, from z15, from z13 when five or more share the point
+    // shared-address tags: a quiet 16 px paper tag, from z15, from z13 when five or more share the point; up and right
+    // of the dot, touching it, or for the selected point up and right of its ring, else up and left
     ctx.font = `800 13px ${T.font}`; ctx.textAlign = "center";
-    for (const { it, p, r } of inView.slice().sort((a, b) => b.it.n - a.it.n)) {
+    for (const { it, p, r } of inView.slice().sort((a, b) => (isSel(b.it) - isSel(a.it)) || (b.it.n - a.it.n))) {
       if (it.n < 2 || !(z >= M.MINZ.stack || (z >= M.MINZ.stackBig && it.n >= 5))) continue;
-      const t = String(it.n), w = Math.max(16, ctx.measureText(t).width + 8), cx = p.x + r + w / 2 + 1, cy = p.y - r - 6;
-      const box = [cx - w / 2 - 1, cy - 9, cx + w / 2 + 1, cy + 9];
-      if (box[0] < 0 || box[2] > size.x || box[1] < 0 || box[3] > size.y || occ.hits(box, it)) continue;
+      const t = String(it.n), w = Math.max(16, ctx.measureText(t).width + 8);
+      const spots = isSel(it) ? [[p.x + ringOut + w / 2, p.y - ringOut - 8], [p.x - ringOut - w / 2, p.y - ringOut - 8]] : [[p.x + r + w / 2 + 1, p.y - r - 6]];
+      const spot = spots.find(([cx, cy]) => { const b = [cx - w / 2 - 1, cy - 9, cx + w / 2 + 1, cy + 9]; return !(b[0] < 0 || b[2] > size.x || b[1] < 0 || b[3] > size.y || occ.hits(b, it)); });
+      if (!spot) continue;
+      const [cx, cy] = spot;
       roundRect(ctx, cx - w / 2, cy - 8, w, 16, 8); ctx.fillStyle = T.stackFill; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = T.stackLine; ctx.stroke();
       ctx.fillStyle = T.stackInk; ctx.fillText(t, cx, cy + 0.5);
-      occ.add(box);
+      occ.add([cx - w / 2 - 1, cy - 9, cx + w / 2 + 1, cy + 9]);
     }
     if (z < M.MINZ.fccLabels) return;
     // 5. FCC callsigns: newly licensed first, then a stable hash, so the same labels win while you pan
     const cap = M.isDesk() ? 400 : 160;
     let drawn = 0;
-    // the selected licence keeps its callsign, set just outside its selection ring (§3.6)
-    // (matched by callsign: /api/hams/{call} answers full precision, /api/hams/map rounds to 6 decimals)
-    const sel = M.ui ? M.ui.selection() : null;
-    const selFcc = sel && sel.layer === "fcc" && (sel.kind === "fcc" || sel.kind === "addr") ? sel : null;
-    const selCalls = selFcc ? new Set(selFcc.kind === "fcc" ? [selFcc.h.callsign] : selFcc.hams.map((h) => h.callsign)) : null;
-    const isSel = (it) => !!selFcc && (selCalls.has(it.call) || (Math.abs(it.latlng[0] - selFcc.lat) < 2e-6 && Math.abs(it.latlng[1] - selFcc.lon) < 2e-6));
     inView.sort((a, b) => (isSel(b.it) - isSel(a.it)) || (b.it.star - a.it.star) || (a.it.hash - b.it.hash));
     ctx.textAlign = "left"; ctx.lineWidth = 3.5; ctx.strokeStyle = T.halo;
     for (const { it, p, r } of inView) {
@@ -459,24 +537,43 @@
   };
 
   /* ------------------------------------------------------------ riding postmark rims below z10 (§3.2) */
+  const YOU_R = 13; // your dot: 18 px, a 3 px ring and a 1 px hairline
   K.makeRim = function (ctx) {
     const y = M.youPlace(), z = ctx.zoom;
     const yp = y ? ctx.toPoint(y.lat, y.lon) : null;
-    if (z >= M.MINZ.fccDots) return { anchor: () => undefined, youLbl: 10, yp };
+    // the neighbours riding on your rim (layer-people.js), so a station that rides there takes another slot
+    const taken = [];
+    /* From z10 your dot sits above every station, so a selected station your dot would cover rides on your rim instead,
+       clear of the dot (and so is the label row beside it), in the first slot of up-left, down-left, down-right,
+       up-right that no riding neighbour takes (§3.2). d: a mark descriptor. Returns its new icon anchor, or undefined
+       to stay put. */
+    const offYou = (d) => {
+      if (!yp || z < M.MINZ.fccDots) return undefined;
+      const p = ctx.toPoint(d.latlng[0], d.latlng[1]), w = d.size[0], h = d.size[1], a = d.anchor || [w / 2, h / 2];
+      const l = p.x - a[0], t = p.y - a[1];
+      if (Math.hypot(M.clamp(yp.x, l, l + w) - yp.x, M.clamp(yp.y, t, t + h) - yp.y) >= YOU_R) return undefined;
+      const k = Math.max(w, h) / 2 + YOU_R + 1; // its label runs level with it: the whole row clears your dot
+      const free = (cx, cy) => !taken.some((o) => cx - w / 2 < o[2] && cx + w / 2 > o[0] && cy - h / 2 < o[3] && cy + h / 2 > o[1]);
+      const c = [[-1, -1], [-1, 1], [1, 1], [1, -1]].map(([sx, sy]) => [yp.x + sx * k, yp.y + sy * k]).find(([cx, cy]) => free(cx, cy)) || [yp.x - k, yp.y - k];
+      return [Math.round(w / 2 - (c[0] - p.x)), Math.round(h / 2 - (c[1] - p.y))];
+    };
+    if (z >= M.MINZ.fccDots) return { anchor: () => undefined, youLbl: 10, youLblL: 10, yp, taken, offYou };
     const circles = ctx.postmarks || [];
     const boxes = [];
-    let youLbl = 10;
+    let youLbl = 10, youLblL = 10;
     if (yp) {
-      // below z10 you sit under your metro's postmark; the word "You" starts 6 px outside its right edge
+      // below z10 you sit under your metro's postmark; the word "You" starts 6 px outside its right edge, or flipped,
+      // ends 6 px outside its left edge (at least 10 px from your dot either way)
       const home = circles.find((k) => Math.hypot(yp.x - k.x, yp.y - k.y) < k.r + 6);
       const lblLeft = Math.max(yp.x + 19, home ? home.x + home.r + 6 : 0);
       youLbl = lblLeft - (yp.x + 9);
+      youLblL = (yp.x - 9) - Math.min(yp.x - 19, home ? home.x - home.r - 6 : Infinity);
       boxes.push([yp.x - 12, yp.y - 12, yp.x + 12, yp.y + 12]);
       boxes.push([lblLeft - 2, yp.y - 10, lblLeft + 38, yp.y + 10]);
     }
     const hit = (b) => boxes.filter((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
     return {
-      yp, youLbl,
+      yp, youLbl, youLblL, taken, offYou,
       /** an icon anchor that draws a w x h mark on a postmark's rim (or clear of you), or undefined to stay put */
       anchor(lat, lon, w, h) {
         const p = ctx.toPoint(lat, lon);
@@ -504,17 +601,26 @@
 
   /* ------------------------------------------------------------ the selection ring (§3.6) */
   let selMarker = null;
-  K.renderSel = function () {
+  /** The selection ring where it is drawn: {latlng, d, el, own, p, cx, cy, R} in container pixels, R reaching the
+   *  outside of its 7 px of bands (2 ring colour, 3 ink, 2 ring colour), own the selected mark's element, or null.
+   *  A mark riding a rim is drawn away from its point: the ring goes where the mark (el) is. */
+  K.selRing = function () {
     const it = M.ui ? M.ui.selection() : null;
     const ring = it && M.ui.ringFor(it); // {latlng, d, el?}
-    if (!ring) { if (selMarker) { M.map.removeLayer(selMarker); selMarker = null; } return; }
-    const { latlng, d, el } = ring;
-    let anchor = [d / 2, d / 2];
-    if (el && el.isConnected) {
-      // a mark riding a rim is drawn away from its point: ring it where it is drawn
-      const r = el.getBoundingClientRect(), mr = M.map.getContainer().getBoundingClientRect(), p = M.map.latLngToContainerPoint(latlng);
-      if (r.width) anchor = [d / 2 - (r.left + r.width / 2 - mr.left - p.x), d / 2 - (r.top + r.height / 2 - mr.top - p.y)];
+    if (!ring) return null;
+    const p = M.map.latLngToContainerPoint(ring.latlng);
+    let cx = p.x, cy = p.y;
+    if (ring.el && ring.el.isConnected) {
+      const r = ring.el.getBoundingClientRect(), mr = M.map.getContainer().getBoundingClientRect();
+      if (r.width) { cx = r.left + r.width / 2 - mr.left; cy = r.top + r.height / 2 - mr.top; }
     }
+    return Object.assign({}, ring, { p, cx, cy, R: ring.d / 2 + 7, own: ring.el || M.ui.markEl(it) });
+  };
+  K.renderSel = function () {
+    const ring = K.selRing();
+    if (!ring) { if (selMarker) { M.map.removeLayer(selMarker); selMarker = null; } return; }
+    const { latlng, d, p, cx, cy } = ring;
+    const anchor = [d / 2 - (cx - p.x), d / 2 - (cy - p.y)];
     const icon = L.divIcon({ className: "hd-selring", iconSize: [d, d], iconAnchor: anchor, html: '<div class="hd-mk-sel"></div>' });
     if (!selMarker) selMarker = L.marker(latlng, { pane: "hd-sel", interactive: false, keyboard: false, icon }).addTo(M.map);
     else { selMarker.setLatLng(latlng); selMarker.setIcon(icon); }

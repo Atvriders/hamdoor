@@ -96,7 +96,8 @@ progress.
   "CF-Connecting-IP"` so the log-in, sign-up and lookup limits count each
   visitor rather than the proxy. Leave it blank if the server can also be
   reached directly.
-- The container needs outbound HTTPS and TCP port 14580 (APRS-IS).
+- The container needs outbound HTTPS, TCP port 14580 (APRS-IS) and the
+  telnet ports of the DX cluster (7373) and the Reverse Beacon Network (7000).
 - **Data** lives in the `hamdoor_data` volume (SQLite plus small caches). To
   keep it on the host instead, swap the volume line for a bind mount like
   `- /path/to/hamdoor-data:/data`; the entrypoint fixes ownership at startup
@@ -185,7 +186,7 @@ pytest -q
 
 | What | Source | How it's used |
 | --- | --- | --- |
-| Licensed hams | FCC ULS weekly amateur extract | Imported weekly into the local database |
+| Licensed hams | FCC ULS weekly amateur extract | Imported into the local database within a day of each Sunday release (the FCC's Last-Modified date is checked daily) |
 | Street locations | US Census batch geocoder | Pre-geocoded weekly by CI, published as a release asset |
 | ZIP centroids, places | GeoNames postal codes and cities500 (CC BY 4.0) | Approximate locations, place search, repeater sanity checks |
 | Repeaters | HearHam.com (primary), BrandMeister (DMR), IRLP | Fetched live by each installation (weekly / daily / twice a day); nothing is redistributed. RepeaterBook is linked to, never copied |
@@ -261,6 +262,14 @@ groups are rate-limited). Interactive docs: `http://localhost:3033/api/docs`
 - **No APRS traffic** — check `/api/aprs/status`: `connected`, `server` and
   `last_error`. Some APRS-IS servers refuse generic logins; set `APRS_LOGIN` to
   your callsign plus an SSID.
+- **"The DX cluster didn't answer"** — the node in `DXC_HOST`/`DXC_PORT`
+  (default `dxc.nc7j.com:7373`, an AR-Cluster) must send a log-in prompt within
+  a few seconds; otherwise hamdoor tries each `host:port` in `DXC_FALLBACKS` in
+  turn and logs which node failed (`docker compose logs hamdoor | grep
+  "\[activity\]"`). `ve7cc.net:23`, the default before, no longer answers: an older
+  `docker-compose.yml` that still names it keeps working through the fallback
+  list. Members log in to the node with their own callsign; hamdoor asks for
+  the node's latest spots (`sh/dx 30`) and listens for 15 seconds.
 - **Container restart loops** — `docker compose logs hamdoor`; a permissions
   error on `/data` means the bind-mounted directory isn't writable by uid 10001.
 

@@ -2,12 +2,13 @@ from contextlib import asynccontextmanager
 from hashlib import sha1
 from pathlib import Path
 import logging
+import mimetypes
 import re
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -38,6 +39,18 @@ def _static_version() -> str:
 
 
 STATIC_VERSION = _static_version()
+
+
+def register_web_types() -> None:
+    """Web fonts by their own types. The python:3.11-slim image has no
+    /etc/mime.types and Python's table has no .woff2, so StaticFiles sent the
+    fonts as application/octet-stream, which GZipMiddleware and Cloudflare
+    then compressed again (font/woff2 is left alone)."""
+    mimetypes.add_type("font/woff2", ".woff2")
+    mimetypes.add_type("font/woff", ".woff")
+
+
+register_web_types()
 
 # make importer/geocoder progress visible in `docker compose logs`, independent
 # of uvicorn's logging config (which can swallow root/basicConfig output)
@@ -143,6 +156,14 @@ async def cache_headers(request: Request, call_next):
         # safe to cache: URLs carry the content-hash version query
         resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
+
+
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
+def favicon():
+    """The door mark, for clients that ask for /favicon.ico without reading
+    the page's <link rel="icon"> (a 404 here was cached by the CDN)."""
+    return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/", include_in_schema=False)

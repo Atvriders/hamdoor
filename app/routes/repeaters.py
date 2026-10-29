@@ -224,7 +224,9 @@ def _lon_ranges(lat: float, lon: float, radius_km: float) -> list[tuple[float, f
     return [(lo, hi)]
 
 
-NEAR_RADIUS_KM = (0.1, 500.0)
+# up to 805 km: the widest range a member can choose (500 miles, You > Range),
+# so `total` counts the range Activity and the Feed print
+NEAR_RADIUS_KM = (0.1, 805.0)
 NEAR_MAX_LIMIT = 200
 
 
@@ -232,7 +234,7 @@ NEAR_MAX_LIMIT = 200
 def repeaters_near(
     lat: float | None = Query(None, ge=-90, le=90, allow_inf_nan=False),
     lon: float | None = Query(None, ge=-180, le=180, allow_inf_nan=False),
-    radius_km: float = Query(80.0, allow_inf_nan=False, description="clamped to 0.1-500"),
+    radius_km: float = Query(80.0, allow_inf_nan=False, description="clamped to 0.1-805"),
     limit: int = Query(50, description="clamped to 1-200"),
     bands: str | None = Query(None),
     modes: str | None = Query(None),
@@ -243,9 +245,10 @@ def repeaters_near(
     user: User = Depends(get_current_user),
 ):
     """Repeaters within radius_km of a point (default: the signed-in user's
-    location), nearest first, each with distance_km and bearing_deg. Radius
-    and limit are clamped like every other map/search limit, never a 422: the
-    app's own 500-mile range (805 km) asks for more than 500 km."""
+    location), nearest first, each with distance_km and bearing_deg, at most
+    `limit` of them; `total` counts every one within the radius. Radius and
+    limit are clamped like every other map/search limit, never a 422; the
+    radius reaches 805 km, a member's widest range (500 miles)."""
     radius_km = min(max(radius_km, NEAR_RADIUS_KM[0]), NEAR_RADIUS_KM[1])
     limit = max(1, min(NEAR_MAX_LIMIT, limit))
     if (lat is None) != (lon is None):
@@ -265,20 +268,25 @@ def repeaters_near(
             ors.append(f"lon BETWEEN :lon_lo{i} AND :lon_hi{i}")
             params.update({f"lon_lo{i}": lo, f"lon_hi{i}": hi})
         clauses.append("(" + " OR ".join(ors) + ")")
+    # every candidate's point to count and sort (a 500-mile range holds a few
+    # thousand), then the whole rows of only the nearest `limit`
     candidates = db.execute(
-        select(Repeater).where(text(" AND ".join(clauses)).bindparams(**params))
-    ).scalars().all()
+        select(Repeater.id, Repeater.lat, Repeater.lon).where(text(" AND ".join(clauses)).bindparams(**params))
+    ).all()
     hits = []
-    for r in candidates:
-        d = rpt.haversine_km(lat, lon, r.lat, r.lon)
+    for rid, rlat, rlon in candidates:
+        d = rpt.haversine_km(lat, lon, rlat, rlon)
         if d <= radius_km:
-            hits.append((d, r))
-    hits.sort(key=lambda t: (t[0], t[1].id))
+            hits.append((d, rid))
+    hits.sort()
+    nearest = hits[:limit]
+    rows = {r.id: r for r in db.execute(
+        select(Repeater).where(Repeater.id.in_([rid for _, rid in nearest]))).scalars()}
     return {"repeaters": [
-        {**repeater_json(r), "distance_km": round(d, 2),
-         "bearing_deg": round(_bearing(lat, lon, r.lat, r.lon), 1)}
-        for d, r in hits[:limit]
-    ]}
+        {**repeater_json(rows[rid]), "distance_km": round(d, 2),
+         "bearing_deg": round(_bearing(lat, lon, rows[rid].lat, rows[rid].lon), 1)}
+        for d, rid in nearest
+    ], "total": len(hits)}
 
 
 @router.get("/{repeater_id}")

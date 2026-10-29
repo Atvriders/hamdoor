@@ -175,6 +175,9 @@ def test_tiny_splits_are_unit_slips_even_inside_the_band():
 @pytest.mark.parametrize("raw, city, state, country", [
     ("Central Point, OR", "Central Point", "OR", "US"),
     ("LAKE CITY, Florida", "Lake City", "FL", "US"),
+    ("ARRL HEADQUARTERS, CT", "ARRL Headquarters", "CT", "US"),  # QA F7: was "Arrl Headquarters"
+    ("Arrl Headquarters", "ARRL Headquarters", None, None),        # ... and HearHam sends it like this
+    ("Ares, Spain", "Ares", None, "ES"),                            # a town, not the ARES acronym
     ("Chula Vista, CA 91915", "Chula Vista", "CA", "US"),
     ("Moscow, ID USA", "Moscow", "ID", "US"),
     ("Vancouver, BC Canada", "Vancouver", "BC", "CA"),
@@ -1469,18 +1472,50 @@ def test_near_explicit_point_radius_limit_and_validation(api):
     assert get(radius_km="nan").status_code == 422 and get(lat=95, lon=0).status_code == 422
 
 
+def test_near_counts_every_repeater_within_the_radius(api):
+    """QA F3: Activity asks for the nearest 50 and printed "50 repeaters within
+    25 miles" where 150 are listed; `total` is the whole count, the list the
+    nearest `limit`."""
+    get = lambda **p: api.client.get("/api/repeaters/near", params=p, headers=api.h)  # noqa: E731
+    everything = get(radius_km=25).json()
+    assert everything["total"] == len(everything["repeaters"]) == 6
+    capped = get(radius_km=25, limit=2).json()
+    assert capped["total"] == 6 and [r["id"] for r in capped["repeaters"]] == ["hearham:7", "hearham:1"]
+    assert get(radius_km=25, bands="70cm").json()["total"] == 1
+
+
 def test_near_clamps_radius_and_limit_instead_of_422(api):
     """B2-4: like every other map/search limit (hams, places, APRS search),
-    out-of-range values are clamped: the app's own 500-mile range is 805 km."""
+    out-of-range values are clamped: the radius at 805 km, the app's own
+    500-mile range."""
     get = lambda **p: api.client.get("/api/repeaters/near", params=p, headers=api.h)  # noqa: E731
-    far = get(radius_km=805)
-    assert far.status_code == 200 and far.json() == get(radius_km=500).json()
+    far = get(radius_km=5000)
+    assert far.status_code == 200 and far.json() == get(radius_km=805).json()
     assert [r["id"] for r in get(lat=41.7, lon=-72.7, radius_km=0).json()["repeaters"]] == ["irlp:10"]
     assert get(lat=41.7, lon=-72.7, radius_km=-3).json()["repeaters"][0]["id"] == "irlp:10"
     assert len(get(limit=0).json()["repeaters"]) == 1 and len(get(limit=-5).json()["repeaters"]) == 1
     rp.write_table(copy.deepcopy(ROUTE_ROWS)
                    + [_rec(f"hearham:{5000 + i}", 39.1 + i / 10000, -94.58) for i in range(210)])
     assert len(get(radius_km=50, limit=1000).json()["repeaters"]) == 200
+
+
+def test_near_counts_a_members_widest_range(api):
+    """QA R2: the range goes up to 500 miles (805 km), but /near clamped the
+    radius to 500 km (311 miles), so "The nearest 50 of 1,999 repeaters within
+    500 miles" and the Feed's "Repeaters 1,999 listed" counted only 311 miles
+    for every range over about 310 miles."""
+    rp.write_table(copy.deepcopy(ROUTE_ROWS) + [
+        _rec("hearham:60", 41.88, -87.63, state="IL", city="Chicago"),   # 664 km from the member
+        _rec("hearham:61", 39.74, -104.99, state="CO", city="Denver"),   # 897 km: beyond 500 miles
+    ])
+    get = lambda **p: api.client.get("/api/repeaters/near", params=p, headers=api.h).json()  # noqa: E731
+    assert get(radius_km=500)["total"] == 6
+    wide = get(radius_km=805, limit=3)  # what Activity asks for a 500-mile range
+    assert wide["total"] == 7 and len(wide["repeaters"]) == 3
+    assert [r["id"] for r in wide["repeaters"]] == ["hearham:7", "hearham:1", "hearham:9"]  # still the nearest
+    last = get(radius_km=805)["repeaters"][-1]
+    assert last["id"] == "hearham:60" and 660 < last["distance_km"] < 668
+    assert get(radius_km=2000)["total"] == 7  # clamped to 805 km: Denver stays out
 
 
 def test_near_reaches_over_the_pole(api):
@@ -1692,6 +1727,6 @@ def test_disabled_server_serves_no_repeaters(api, monkeypatch):
     d = _map(api)
     assert d["repeaters"] == [] and d["total"] == 0
     assert _map(api, zoom=5)["cells"] == []
-    assert api.client.get("/api/repeaters/near", headers=api.h).json() == {"repeaters": []}
+    assert api.client.get("/api/repeaters/near", headers=api.h).json() == {"repeaters": [], "total": 0}
     assert api.client.get("/api/repeaters/hearham:1", headers=api.h).status_code == 404
     assert api.client.get("/api/repeaters/status", headers=api.h).json()["enabled"] is False
